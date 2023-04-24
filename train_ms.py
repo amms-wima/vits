@@ -1,10 +1,5 @@
 import os
-import json
-import argparse
-import itertools
-import math
 import torch
-from torch import nn, optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -36,22 +31,36 @@ from text.symbols import symbols
 
 torch.backends.cudnn.benchmark = True
 global_step = 0
+device = None
+
+# CPU porting note: 
+# Do not try and be over aggresive by using the torch amd CPU modules 
+# because it crashes. Better to have the training complete gracefully 
+# with CUDA warning messages.
 
 
 def main():
   """Assume Single Node Multi GPUs Training Only"""
-  assert torch.cuda.is_available(), "CPU training is not allowed."
+  # assert torch.cuda.is_available(), "CPU training is not allowed."
 
   n_gpus = torch.cuda.device_count()
   os.environ['MASTER_ADDR'] = 'localhost'
-  os.environ['MASTER_PORT'] = '80000'
+  os.environ['MASTER_PORT'] = '8000'
 
   hps = utils.get_hparams()
+  if not torch.cuda.is_available():
+    n_gpus = 1
   mp.spawn(run, nprocs=n_gpus, args=(n_gpus, hps,))
 
 
 def run(rank, n_gpus, hps):
   global global_step
+  logger = utils.get_logger(hps.model_dir)
+  if torch.cuda.is_available():
+    device = torch.device("cuda", rank)
+  else:
+    logger.warn("NOTE: CPU Usage is highly ill advised; to be used for local debugging!!!")
+    device = torch.device("cpu")
   if rank == 0:
     logger = utils.get_logger(hps.model_dir)
     logger.info(hps)
@@ -59,9 +68,8 @@ def run(rank, n_gpus, hps):
     writer = SummaryWriter(log_dir=hps.model_dir)
     writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
 
-  dist.init_process_group(backend='nccl', init_method='env://', world_size=n_gpus, rank=rank)
+  dist.init_process_group(backend='gloo' if not torch.cuda.is_available() or os.name == 'nt' else 'nccl', init_method='env://', world_size=n_gpus, rank=rank)
   torch.manual_seed(hps.train.seed)
-  torch.cuda.set_device(rank)
 
   train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps.data)
   train_sampler = DistributedBucketSampler(
@@ -72,11 +80,11 @@ def run(rank, n_gpus, hps):
       rank=rank,
       shuffle=True)
   collate_fn = TextAudioSpeakerCollate()
-  train_loader = DataLoader(train_dataset, num_workers=8, shuffle=False, pin_memory=True,
+  train_loader = DataLoader(train_dataset, num_workers=2, shuffle=False, pin_memory=True,
       collate_fn=collate_fn, batch_sampler=train_sampler)
   if rank == 0:
     eval_dataset = TextAudioSpeakerLoader(hps.data.validation_files, hps.data)
-    eval_loader = DataLoader(eval_dataset, num_workers=8, shuffle=False,
+    eval_loader = DataLoader(eval_dataset, num_workers=2, shuffle=False,
         batch_size=hps.train.batch_size, pin_memory=True,
         drop_last=False, collate_fn=collate_fn)
 
@@ -85,8 +93,8 @@ def run(rank, n_gpus, hps):
       hps.data.filter_length // 2 + 1,
       hps.train.segment_size // hps.data.hop_length,
       n_speakers=hps.data.n_speakers,
-      **hps.model).cuda(rank)
-  net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).cuda(rank)
+      **hps.model).to(device)
+  net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).to(device)
   optim_g = torch.optim.AdamW(
       net_g.parameters(), 
       hps.train.learning_rate, 
@@ -97,14 +105,24 @@ def run(rank, n_gpus, hps):
       hps.train.learning_rate, 
       betas=hps.train.betas, 
       eps=hps.train.eps)
-  net_g = DDP(net_g, device_ids=[rank])
-  net_d = DDP(net_d, device_ids=[rank])
+  if torch.cuda.is_available():
+    net_g = DDP(net_g, device_ids=[rank])
+    net_d = DDP(net_d, device_ids=[rank])
+  else:
+    net_g = DDP(net_g, device_ids=None, output_device=None)
+    net_d = DDP(net_d, device_ids=None, output_device=None)
 
+  gen_loaded = False
+  dis_loaded = False
   try:
     _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), net_g, optim_g)
-    _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d, optim_d)
+    gen_loaded = True
+    _, _, _, epoch_strD = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d, optim_d)
+    dis_loaded = True
+    logger.warn(f"Checkpoint epoch mismatch: G[{epoch_str}] <> D[{epoch_strD}]")
     global_step = (epoch_str - 1) * len(train_loader)
   except:
+    logger.warn(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}")
     epoch_str = 1
     global_step = 0
 
@@ -112,6 +130,7 @@ def run(rank, n_gpus, hps):
   scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=hps.train.lr_decay, last_epoch=epoch_str-2)
 
   scaler = GradScaler(enabled=hps.train.fp16_run)
+  # scaler = GradScaler(enabled=torch.cuda.is_available() and hps.train.fp16_run)
 
   for epoch in range(epoch_str, hps.train.epochs + 1):
     if rank==0:
@@ -136,10 +155,10 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
   net_g.train()
   net_d.train()
   for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(train_loader):
-    x, x_lengths = x.cuda(rank, non_blocking=True), x_lengths.cuda(rank, non_blocking=True)
-    spec, spec_lengths = spec.cuda(rank, non_blocking=True), spec_lengths.cuda(rank, non_blocking=True)
-    y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
-    speakers = speakers.cuda(rank, non_blocking=True)
+    x, x_lengths = x.to(device, non_blocking=True), x_lengths.to(device, non_blocking=True)
+    spec, spec_lengths = spec.to(device, non_blocking=True), spec_lengths.to(device, non_blocking=True)
+    y, y_lengths = y.to(device, non_blocking=True), y_lengths.to(device, non_blocking=True)
+    speakers = speakers.to(device, non_blocking=True)
 
     with autocast(enabled=hps.train.fp16_run):
       y_hat, l_length, attn, ids_slice, x_mask, z_mask,\
@@ -236,10 +255,10 @@ def evaluate(hps, generator, eval_loader, writer_eval):
     generator.eval()
     with torch.no_grad():
       for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(eval_loader):
-        x, x_lengths = x.cuda(0), x_lengths.cuda(0)
-        spec, spec_lengths = spec.cuda(0), spec_lengths.cuda(0)
-        y, y_lengths = y.cuda(0), y_lengths.cuda(0)
-        speakers = speakers.cuda(0)
+        x, x_lengths = x.to(device), x_lengths.to(device)
+        spec, spec_lengths = spec.to(device), spec_lengths.to(device)
+        y, y_lengths = y.to(device), y_lengths.to(device)
+        speakers = speakers.to(device)
 
         # remove else
         x = x[:1]

@@ -1,7 +1,5 @@
 import math
-import numpy as np
 import torch
-from torch import nn
 from torch.nn import functional as F
 
 
@@ -27,22 +25,22 @@ def intersperse(lst, item):
   return result
 
 
-def kl_divergence(m_p, logs_p, m_q, logs_q):
-  """KL(P||Q)"""
-  kl = (logs_q - logs_p) - 0.5
-  kl += 0.5 * (torch.exp(2. * logs_p) + ((m_p - m_q)**2)) * torch.exp(-2. * logs_q)
-  return kl
+# def kl_divergence(m_p, logs_p, m_q, logs_q):
+#   """KL(P||Q)"""
+#   kl = (logs_q - logs_p) - 0.5
+#   kl += 0.5 * (torch.exp(2. * logs_p) + ((m_p - m_q)**2)) * torch.exp(-2. * logs_q)
+#   return kl
 
 
-def rand_gumbel(shape):
-  """Sample from the Gumbel distribution, protect from overflows."""
-  uniform_samples = torch.rand(shape) * 0.99998 + 0.00001
-  return -torch.log(-torch.log(uniform_samples))
+# def rand_gumbel(shape):
+#   """Sample from the Gumbel distribution, protect from overflows."""
+#   uniform_samples = torch.rand(shape) * 0.99998 + 0.00001
+#   return -torch.log(-torch.log(uniform_samples))
 
 
-def rand_gumbel_like(x):
-  g = rand_gumbel(x.size()).to(dtype=x.dtype, device=x.device)
-  return g
+# def rand_gumbel_like(x):
+#   g = rand_gumbel(x.size()).to(dtype=x.dtype, device=x.device)
+#   return g
 
 
 def slice_segments(x, ids_str, segment_size=4):
@@ -80,16 +78,16 @@ def get_timing_signal_1d(
   return signal
 
 
-def add_timing_signal_1d(x, min_timescale=1.0, max_timescale=1.0e4):
-  b, channels, length = x.size()
-  signal = get_timing_signal_1d(length, channels, min_timescale, max_timescale)
-  return x + signal.to(dtype=x.dtype, device=x.device)
+# def add_timing_signal_1d(x, min_timescale=1.0, max_timescale=1.0e4):
+#   b, channels, length = x.size()
+#   signal = get_timing_signal_1d(length, channels, min_timescale, max_timescale)
+#   return x + signal.to(dtype=x.dtype, device=x.device)
 
 
-def cat_timing_signal_1d(x, min_timescale=1.0, max_timescale=1.0e4, axis=1):
-  b, channels, length = x.size()
-  signal = get_timing_signal_1d(length, channels, min_timescale, max_timescale)
-  return torch.cat([x, signal.to(dtype=x.dtype, device=x.device)], axis)
+# def cat_timing_signal_1d(x, min_timescale=1.0, max_timescale=1.0e4, axis=1):
+#   b, channels, length = x.size()
+#   signal = get_timing_signal_1d(length, channels, min_timescale, max_timescale)
+#   return torch.cat([x, signal.to(dtype=x.dtype, device=x.device)], axis)
 
 
 def subsequent_mask(length):
@@ -113,9 +111,9 @@ def convert_pad_shape(pad_shape):
   return pad_shape
 
 
-def shift_1d(x):
-  x = F.pad(x, convert_pad_shape([[0, 0], [0, 0], [1, 0]]))[:, :, :-1]
-  return x
+# def shift_1d(x):
+#   x = F.pad(x, convert_pad_shape([[0, 0], [0, 0], [1, 0]]))[:, :, :-1]
+#   return x
 
 
 def sequence_mask(length, max_length=None):

@@ -1,9 +1,6 @@
 import torch 
 from torch.nn import functional as F
 
-import commons
-
-
 def feature_loss(fmap_r, fmap_g):
   loss = 0
   for dr, dg in zip(fmap_r, fmap_g):

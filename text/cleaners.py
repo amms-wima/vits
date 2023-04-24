@@ -49,8 +49,8 @@ def expand_abbreviations(text):
   return text
 
 
-def expand_numbers(text):
-  return normalize_numbers(text)
+# def expand_numbers(text):
+#   return normalize_numbers(text)
 
 
 def lowercase(text):
@@ -65,29 +65,29 @@ def convert_to_ascii(text):
   return unidecode(text)
 
 
-def basic_cleaners(text):
-  '''Basic pipeline that lowercases and collapses whitespace without transliteration.'''
-  text = lowercase(text)
-  text = collapse_whitespace(text)
-  return text
+# def basic_cleaners(text):
+#   '''Basic pipeline that lowercases and collapses whitespace without transliteration.'''
+#   text = lowercase(text)
+#   text = collapse_whitespace(text)
+#   return text
 
 
-def transliteration_cleaners(text):
-  '''Pipeline for non-English text that transliterates to ASCII.'''
-  text = convert_to_ascii(text)
-  text = lowercase(text)
-  text = collapse_whitespace(text)
-  return text
+# def transliteration_cleaners(text):
+#   '''Pipeline for non-English text that transliterates to ASCII.'''
+#   text = convert_to_ascii(text)
+#   text = lowercase(text)
+#   text = collapse_whitespace(text)
+#   return text
 
 
-def english_cleaners(text):
-  '''Pipeline for English text, including abbreviation expansion.'''
-  text = convert_to_ascii(text)
-  text = lowercase(text)
-  text = expand_abbreviations(text)
-  phonemes = phonemize(text, language='en-us', backend='espeak', strip=True)
-  phonemes = collapse_whitespace(phonemes)
-  return phonemes
+# def english_cleaners(text):
+#   '''Pipeline for English text, including abbreviation expansion.'''
+#   text = convert_to_ascii(text)
+#   text = lowercase(text)
+#   text = expand_abbreviations(text)
+#   phonemes = phonemize(text, language='en-us', backend='espeak', strip=True)
+#   phonemes = collapse_whitespace(phonemes)
+#   return phonemes
 
 
 def english_cleaners2(text):
