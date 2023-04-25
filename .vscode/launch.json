@@ -5,13 +5,39 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Prepprocess",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "preprocess.py",
+            "args": [
+                "--text_index",
+                "2",
+                "--filelists",
+                // "./training_data/filelists/metadata_20min_p1.csv"
+                "./training_data/filelists/metadata_ipa_palitestcases.csv"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "purpose": [
+                "debug-in-terminal"
+            ],
+        },
+        {
             "name": "Python: Train",
             "type": "python",
             "request": "launch",
             "program": "train_ms.py",
-            "args": ["-c", "./configs/asw_base.json", "-m", "build"],
+            "args": [
+                "-c",
+                "./configs/asw_base.json",
+                "-m",
+                "build"
+            ],
             "console": "integratedTerminal",
-            "purpose": ["debug-in-terminal"],
+            "purpose": [
+                "debug-in-terminal"
+            ],
             "justMyCode": false
         }
     ]

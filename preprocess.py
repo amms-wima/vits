@@ -4,22 +4,35 @@ from utils import load_filepaths_and_text
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
-  parser.add_argument("--out_extension", default="cleaned")
+  parser.add_argument("--out_extension", default="cleaned.csv")
   parser.add_argument("--text_index", default=1, type=int)
   parser.add_argument("--filelists", nargs="+", default=["filelists/ljs_audio_text_val_filelist.txt", "filelists/ljs_audio_text_test_filelist.txt"])
-  parser.add_argument("--text_cleaners", nargs="+", default=["english_cleaners2"])
+  parser.add_argument("--text_cleaners", nargs="+", default=["en_training_clean_and_phonemize"])
 
   args = parser.parse_args()
     
 
+  min_pho_len = None
+  max_pho_len = 0
   for filelist in args.filelists:
-    print("START:", filelist)
     filepaths_and_text = load_filepaths_and_text(filelist)
-    for i in range(len(filepaths_and_text)):
-      original_text = filepaths_and_text[i][args.text_index]
-      cleaned_text = text._clean_text(original_text, args.text_cleaners)
-      filepaths_and_text[i][args.text_index] = cleaned_text
-
-    new_filelist = filelist + "." + args.out_extension
+    total_lines = len(filepaths_and_text)
+    print(f"preprocess: [{total_lines}] {filelist}")
+    new_filelist = filelist[:-3] + args.out_extension
     with open(new_filelist, "w", encoding="utf-8") as f:
-      f.writelines(["|".join(x) + "\n" for x in filepaths_and_text])
+      for i in range(total_lines):
+        replace_line_entry = filepaths_and_text[i]
+        original_text = filepaths_and_text[i][args.text_index]
+        cleaned_text = text._clean_text(original_text, args.text_cleaners)
+        replace_line_entry[args.text_index] = cleaned_text
+        pho_len = len(cleaned_text)
+        if (min_pho_len is None):
+          min_pho_len = pho_len
+        min_pho_len = min(min_pho_len, pho_len)
+        max_pho_len = max(max_pho_len, pho_len)
+        if (i % 100 == 0):
+          print(f"{i} / {total_lines}")
+        else:
+          print(".")
+        f.writelines("|".join(replace_line_entry) + "\n")
+  print(f"pho lines> min({min_pho_len}), max({max_pho_len})")

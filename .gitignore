@@ -1,6 +1,8 @@
+.vscode
 DUMMY1
 DUMMY2
 DUMMY3
+training_data
 logs
 __pycache__
 .ipynb_checkpoints
