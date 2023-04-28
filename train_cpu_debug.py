@@ -1,6 +1,6 @@
 import os
 import torch
-from torch import nn
+import torch.nn as nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -32,22 +32,38 @@ from text.symbols import symbols
 
 torch.backends.cudnn.benchmark = True
 global_step = 0
+device = None
+
+# CPU porting note: 
+# Do not try and be over aggresive by using the torch amd CPU modules 
+# because it crashes. Better to have the training complete gracefully 
+# with CUDA warning messages.
 
 
 def main():
   """Assume Single Node Multi GPUs Training Only"""
-  assert torch.cuda.is_available(), "CPU training is not allowed."
+  # assert torch.cuda.is_available(), "CPU training is not allowed."
 
   n_gpus = torch.cuda.device_count()
   os.environ['MASTER_ADDR'] = 'localhost'
   os.environ['MASTER_PORT'] = '8000'
 
   hps = utils.get_hparams()
-  mp.spawn(run, nprocs=n_gpus, args=(n_gpus, hps,))
+  if torch.cuda.is_available():
+    mp.spawn(run, nprocs=n_gpus, args=(n_gpus, hps,))
+  else:
+    n_gpus = 1
+    run(0, n_gpus, hps)
 
 
 def run(rank, n_gpus, hps):
   global global_step
+  logger = utils.get_logger(hps.model_dir)
+  if torch.cuda.is_available():
+    device = torch.device("cuda", rank)
+  else:
+    logger.warn("NOTE: CPU Usage is highly ill advised; to be used for local debugging!!!")
+    device = torch.device("cpu")
   if rank == 0:
     logger = utils.get_logger(hps.model_dir)
     logger.info(hps)
@@ -55,9 +71,8 @@ def run(rank, n_gpus, hps):
     writer = SummaryWriter(log_dir=hps.model_dir)
     writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
 
-  dist.init_process_group(backend='nccl', init_method='env://', world_size=n_gpus, rank=rank)
+  dist.init_process_group(backend='gloo' if not torch.cuda.is_available() or os.name == 'nt' else 'nccl', init_method='env://', world_size=n_gpus, rank=rank)
   torch.manual_seed(hps.train.seed)
-  torch.cuda.set_device(rank)
 
   train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps.data)
   train_sampler = DistributedBucketSampler(
@@ -81,8 +96,8 @@ def run(rank, n_gpus, hps):
       hps.data.filter_length // 2 + 1,
       hps.train.segment_size // hps.data.hop_length,
       n_speakers=hps.data.n_speakers,
-      **hps.model).cuda(rank)
-  net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).cuda(rank)
+      **hps.model).to(device)
+  net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).to(device)
   optim_g = torch.optim.AdamW(
       net_g.parameters(), 
       hps.train.learning_rate, 
@@ -93,8 +108,12 @@ def run(rank, n_gpus, hps):
       hps.train.learning_rate, 
       betas=hps.train.betas, 
       eps=hps.train.eps)
-  net_g = DDP(net_g, device_ids=[rank])
-  net_d = DDP(net_d, device_ids=[rank])
+  if torch.cuda.is_available():
+    net_g = DDP(net_g, device_ids=[rank])
+    net_d = DDP(net_d, device_ids=[rank])
+  else:
+    net_g = DDP(net_g, device_ids=None, output_device=None)
+    net_d = DDP(net_d, device_ids=None, output_device=None)
 
   gen_loaded = False
   dis_loaded = False
@@ -137,12 +156,12 @@ def _freezing_layers_if_fine_tuning(hps, logger, net_g, net_d):
       for name, param in net_g.named_parameters():
           param.requires_grad = True
           param_lst.append(name)
-      logger.debug(f"freezing net_g layers: {param_lst}")
+      logger.info(f"freezing net_g layers: {param_lst}")
       param_lst = []
       for name, param in net_d.named_parameters():
           param.requires_grad = True
           param_lst.append(name)
-      logger.debug(f"freezing net_d layers: {param_lst}")
+      logger.info(f"freezing net_d layers: {param_lst}")
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
@@ -159,10 +178,10 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
   net_g.train()
   net_d.train()
   for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(train_loader):
-    x, x_lengths = x.cuda(rank, non_blocking=True), x_lengths.cuda(rank, non_blocking=True)
-    spec, spec_lengths = spec.cuda(rank, non_blocking=True), spec_lengths.cuda(rank, non_blocking=True)
-    y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
-    speakers = speakers.cuda(rank, non_blocking=True)
+    x, x_lengths = x.to(device, non_blocking=True), x_lengths.to(device, non_blocking=True)
+    spec, spec_lengths = spec.to(device, non_blocking=True), spec_lengths.to(device, non_blocking=True)
+    y, y_lengths = y.to(device, non_blocking=True), y_lengths.to(device, non_blocking=True)
+    speakers = speakers.to(device, non_blocking=True)
 
     with autocast(enabled=hps.train.fp16_run):
       y_hat, l_length, attn, ids_slice, x_mask, z_mask,\
@@ -273,10 +292,10 @@ def evaluate(hps, generator, eval_loader, writer_eval):
     generator.eval()
     with torch.no_grad():
       for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(eval_loader):
-        x, x_lengths = x.cuda(0), x_lengths.cuda(0)
-        spec, spec_lengths = spec.cuda(0), spec_lengths.cuda(0)
-        y, y_lengths = y.cuda(0), y_lengths.cuda(0)
-        speakers = speakers.cuda(0)
+        x, x_lengths = x.to(device), x_lengths.to(device)
+        spec, spec_lengths = spec.to(device), spec_lengths.to(device)
+        y, y_lengths = y.to(device), y_lengths.to(device)
+        speakers = speakers.to(device)
 
         # remove else
         x = x[:1]
