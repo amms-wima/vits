@@ -31,8 +31,10 @@
             "args": [
                 "-c",
                 "./configs/asw_base.json",
-                "-m",
-                "build"
+                "-o",
+                "build",
+                "-ft",
+                "True"
             ],
             "console": "integratedTerminal",
             "purpose": [

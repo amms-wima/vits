@@ -1,3 +1,4 @@
+import re
 import os
 import glob
 import sys
@@ -8,6 +9,7 @@ import subprocess
 import numpy as np
 from scipy.io.wavfile import read
 import torch
+import datetime
 
 MATPLOTLIB_FLAG = False
 
@@ -21,9 +23,19 @@ def load_checkpoint(checkpoint_path, model, optimizer=None):
   iteration = checkpoint_dict['iteration']
   learning_rate = checkpoint_dict['learning_rate']
   if optimizer is not None:
-    optimizer.load_state_dict(checkpoint_dict['optimizer'])
+    try:
+      optimizer.load_state_dict(checkpoint_dict['optimizer'])
+    except: 
+      logger.warn("optimizer was not loaded from checkpoint dictionary")
+  try:
+    gbl_step = checkpoint_dict['gbl_step']
+  except:
+    gbl_step = 0
   saved_state_dict = checkpoint_dict['model']
-  if hasattr(model, 'module'):
+  is_model_module = hasattr(model, 'module')
+  _modify_weight_tensor_size(saved_state_dict, model, is_model_module, "enc_p.emb.weight")
+  _modify_weight_tensor_size(saved_state_dict, model, is_model_module, "emb_g.weight")
+  if is_model_module:
     state_dict = model.module.state_dict()
   else:
     state_dict = model.state_dict()
@@ -34,18 +46,42 @@ def load_checkpoint(checkpoint_path, model, optimizer=None):
     except:
       logger.info("%s is not in the checkpoint" % k)
       new_state_dict[k] = v
-  if hasattr(model, 'module'):
+  if is_model_module:
     model.module.load_state_dict(new_state_dict)
   else:
     model.load_state_dict(new_state_dict)
   logger.info("Loaded checkpoint '{}' (iteration {})" .format(
     checkpoint_path, iteration))
-  return model, optimizer, learning_rate, iteration
+  return model, optimizer, learning_rate, iteration, gbl_step
 
 
-def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path):
+def _modify_weight_tensor_size(saved_state_dict, model, is_model_module, weight_layer):
+  if weight_layer in saved_state_dict:
+      num_rows_checkpoint = saved_state_dict[weight_layer].shape[0]
+      if (is_model_module):
+        num_rows_current_model = _get_nested_attr(model.module, weight_layer).shape[0]
+      else:
+        num_rows_current_model = _get_nested_attr(model, weight_layer).shape[0]
+      if num_rows_checkpoint < num_rows_current_model:
+          diff_rows = num_rows_current_model - num_rows_checkpoint
+          saved_state_dict[weight_layer] = torch.cat((saved_state_dict[weight_layer], 
+                                                            torch.zeros((diff_rows, saved_state_dict[weight_layer].shape[1]))),
+                                                            dim=0)[:num_rows_current_model, :]
+
+def _get_nested_attr(src, dot_sep_attr_spec):
+  attr_list = dot_sep_attr_spec.split(".")
+  ret = src
+  for item in attr_list:
+    ret = ret.__getattr__(item)
+  return ret
+
+
+def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path, gbl_step=0):
   logger.info("Saving model and optimizer state at iteration {} to {}".format(
     iteration, checkpoint_path))
+  prev_cp_path = checkpoint_path.replace("latest", "previous")
+  if os.path.exists(checkpoint_path):
+      os.rename(checkpoint_path, prev_cp_path)  
   if hasattr(model, 'module'):
     state_dict = model.module.state_dict()
   else:
@@ -53,7 +89,9 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path)
   torch.save({'model': state_dict,
               'iteration': iteration,
               'optimizer': optimizer.state_dict(),
-              'learning_rate': learning_rate}, checkpoint_path)
+              'learning_rate': learning_rate,
+              'gbl_step': gbl_step,
+              }, checkpoint_path)
 
 
 def summarize(writer, global_step, scalars={}, histograms={}, images={}, audios={}, audio_sampling_rate=22050):
@@ -145,17 +183,20 @@ def get_hparams(init=True):
   parser = argparse.ArgumentParser()
   parser.add_argument('-c', '--config', type=str, default="./configs/base.json",
                       help='JSON file for configuration')
-  parser.add_argument('-m', '--model', type=str, required=True,
-                      help='Model name')
+  parser.add_argument('-o', '--output_path', type=str, required=True,
+                      help='Training output directory')
+  parser.add_argument('-ft', '--fine_tune', type=bool, default=False, 
+                      help='set layers to be frozen when fine-tuning')
+  parser.add_argument('-s', '--start_global_step', type=int, default=-1, help='start global steps count [-1=system determined]')
   
   args = parser.parse_args()
-  model_dir = os.path.join("./", args.model)
+  output_path = os.path.join("./", args.output_path)
 
-  if not os.path.exists(model_dir):
-    os.makedirs(model_dir)
+  if not os.path.exists(output_path):
+    os.makedirs(output_path)
 
   config_path = args.config
-  config_save_path = os.path.join(model_dir, "config.json")
+  config_save_path = os.path.join(output_path, "config.json")
   if init:
     with open(config_path, "r") as f:
       data = f.read()
@@ -167,8 +208,41 @@ def get_hparams(init=True):
   config = json.loads(data)
   
   hparams = HParams(**config)
-  hparams.model_dir = model_dir
+  hparams.model_dir = output_path
+  hparams.fine_tune = args.fine_tune
+  hparams.start_global_step = args.start_global_step
+
+  hparams.in_train_manifest_path = os.path.join(output_path, "in_train_manifest.json")
+  hparams.in_train_manifest = {}
+  hparams.in_train_manifest["last_updated"] = "<pending>"
+  hparams.in_train_manifest["abort_on_next_iteration"] = False
+  hparams.in_train_manifest["global_step_start"] = -1
+  hparams.in_train_manifest["iteration"] = -1
+  hparams.in_train_manifest["previous_step"] = -1
+  hparams.in_train_manifest["latest_step"] = -1  
   return hparams
+
+
+def update_abort_requested_from_in_train_manifest(hps):
+    if os.path.exists(hps.in_train_manifest_path):
+        with open(hps.in_train_manifest_path, "r") as f:
+            data = f.read()
+            config = json.loads(data)
+            if "abort_on_next_iteration" in config:
+                is_abort = config["abort_on_next_iteration"]
+                hps.in_train_manifest["abort_on_next_iteration"] = is_abort
+                if is_abort:
+                    logger.warn("Abort flagged in training!")
+
+
+def save_in_train_manifest(hps, iteration, glb_step):
+    hps.in_train_manifest["last_updated"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    hps.in_train_manifest["iteration"] = iteration
+    hps.in_train_manifest["previous_step"] = hps.in_train_manifest["latest_step"] 
+    hps.in_train_manifest["latest_step"] = glb_step
+
+    with open(hps.in_train_manifest_path, "w") as f:
+        json.dump(hps.in_train_manifest, f, indent=2)
 
 
 def get_hparams_from_dir(model_dir):

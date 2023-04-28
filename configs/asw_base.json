@@ -1,7 +1,7 @@
 {
   "train": {
-    "log_interval": 10,
-    "eval_interval": 50,
+    "log_interval": 200,
+    "eval_interval": 1000,
     "seed": 1234,
     "epochs": 10000,
     "learning_rate": 2e-4,
@@ -17,8 +17,8 @@
     "c_kl": 1.0
   },
   "data": {
-    "training_files": "./training_data/filelists/concat/single_speaker_ljs.cleaned.csv",
-    "validation_files": "./training_data/filelists/concat/single_speaker_ljs-eval.cleaned.csv",
+    "training_files": "./training_data/filelists/concat/ashinw_ljs.cleaned.csv",
+    "validation_files": "./training_data/filelists/concat/ashinw_ljs-eval.cleaned.csv",
     "text_cleaners":["en_training_clean_and_phonemize"],
     "max_wav_value": 32768.0,
     "sampling_rate": 22050,
@@ -29,7 +29,7 @@
     "mel_fmin": 0.0,
     "mel_fmax": null,
     "add_blank": true,
-    "n_speakers": 0,
+    "n_speakers": 111,
     "cleaned_text": true
   },
   "model": {

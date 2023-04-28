@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.nn as nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -48,9 +49,11 @@ def main():
   os.environ['MASTER_PORT'] = '8000'
 
   hps = utils.get_hparams()
-  if not torch.cuda.is_available():
+  if torch.cuda.is_available():
+    mp.spawn(run, nprocs=n_gpus, args=(n_gpus, hps,))
+  else:
     n_gpus = 1
-  mp.spawn(run, nprocs=n_gpus, args=(n_gpus, hps,))
+    run(0, n_gpus, hps)
 
 
 def run(rank, n_gpus, hps):
@@ -114,23 +117,28 @@ def run(rank, n_gpus, hps):
 
   gen_loaded = False
   dis_loaded = False
+  epoch_str = 1
+  global_step = 0
   try:
-    _, _, _, epoch_str = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "G_*.pth"), net_g, optim_g)
+    g_chkPointSrc = os.path.join(hps.model_dir, "G_latest.pth")
+    d_chkPointSrc = os.path.join(hps.model_dir, "D_latest.pth")
+    _, _, _, epoch_str, global_step = utils.load_checkpoint(g_chkPointSrc, net_g, optim_g) 
+    logger.info(f"Checkpoint epoch, step: G[{epoch_str}, {global_step}]")
     gen_loaded = True
-    _, _, _, epoch_strD = utils.load_checkpoint(utils.latest_checkpoint_path(hps.model_dir, "D_*.pth"), net_d, optim_d)
+    _, _, _, epoch_strD, gsD = utils.load_checkpoint(d_chkPointSrc, net_d, optim_d)
+    logger.info(f"Checkpoint epoch, step: D[{epoch_strD}, {gsD}]")
     dis_loaded = True
-    logger.warn(f"Checkpoint epoch mismatch: G[{epoch_str}] <> D[{epoch_strD}]")
-    global_step = (epoch_str - 1) * len(train_loader)
   except:
     logger.warn(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}")
+
+  if (epoch_str == 0):
     epoch_str = 1
-    global_step = 0
+  _freezing_layers_if_fine_tuning(hps, logger, net_g, net_d)
 
   scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=hps.train.lr_decay, last_epoch=epoch_str-2)
   scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=hps.train.lr_decay, last_epoch=epoch_str-2)
 
   scaler = GradScaler(enabled=hps.train.fp16_run)
-  # scaler = GradScaler(enabled=torch.cuda.is_available() and hps.train.fp16_run)
 
   for epoch in range(epoch_str, hps.train.epochs + 1):
     if rank==0:
@@ -139,6 +147,21 @@ def run(rank, n_gpus, hps):
       train_and_evaluate(rank, epoch, hps, [net_g, net_d], [optim_g, optim_d], [scheduler_g, scheduler_d], scaler, [train_loader, None], None, None)
     scheduler_g.step()
     scheduler_d.step()
+
+
+def _freezing_layers_if_fine_tuning(hps, logger, net_g, net_d):
+    if (hps.fine_tune):
+    # freeze all other layers except speaker embedding
+      param_lst = []
+      for name, param in net_g.named_parameters():
+          param.requires_grad = True
+          param_lst.append(name)
+      logger.info(f"freezing net_g layers: {param_lst}")
+      param_lst = []
+      for name, param in net_d.named_parameters():
+          param.requires_grad = True
+          param_lst.append(name)
+      logger.info(f"freezing net_d layers: {param_lst}")
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
@@ -241,14 +264,28 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
           images=image_dict,
           scalars=scalar_dict)
 
+      utils.update_abort_requested_from_in_train_manifest(hps)
+      already_saved = False
       if global_step % hps.train.eval_interval == 0:
         evaluate(hps, net_g, eval_loader, writer_eval)
-        utils.save_checkpoint(net_g, optim_g, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "G_{}.pth".format(global_step)))
-        utils.save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "D_{}.pth".format(global_step)))
+        _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d)
+        already_saved = True
+      if (hps.in_train_manifest["abort_on_next_iteration"] == True):
+          if (not already_saved):
+            _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d)
+          exit()
+
     global_step += 1
   
   if rank == 0:
     logger.info('====> Epoch: {}'.format(epoch))
+
+
+def _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d):
+    global global_step
+    utils.save_in_train_manifest(hps, epoch, global_step)
+    utils.save_checkpoint(net_g, optim_g, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "G_latest.pth"), global_step)
+    utils.save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "D_latest.pth"), global_step)
 
  
 def evaluate(hps, generator, eval_loader, writer_eval):
