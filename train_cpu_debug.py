@@ -130,7 +130,7 @@ def run(rank, n_gpus, hps):
     dis_loaded = True
   except:
     logger.warn(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}")
-
+  hps.in_train_manifest["global_step_start"] = global_step
   if (epoch_str == 0):
     epoch_str = 1
   _freezing_layers_if_fine_tuning(hps, logger, net_g, net_d)
@@ -268,8 +268,9 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
       already_saved = False
       if global_step % hps.train.eval_interval == 0:
         evaluate(hps, net_g, eval_loader, writer_eval)
-        _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d)
-        already_saved = True
+        if (global_step > hps.in_train_manifest["global_step_start"]):
+          _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d)
+          already_saved = True
       if (hps.in_train_manifest["abort_on_next_iteration"] == True):
           if (not already_saved):
             _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d)
