@@ -10,6 +10,7 @@ import numpy as np
 from scipy.io.wavfile import read
 import torch
 import datetime
+import shutil
 
 MATPLOTLIB_FLAG = False
 
@@ -50,8 +51,8 @@ def load_checkpoint(checkpoint_path, model, optimizer=None):
     model.module.load_state_dict(new_state_dict)
   else:
     model.load_state_dict(new_state_dict)
-  logger.info("Loaded checkpoint '{}' (iteration {})" .format(
-    checkpoint_path, iteration))
+  logger.info("Loaded checkpoint '{}' (step/iteration): {}/{}" .format(
+    checkpoint_path, gbl_step, iteration))
   return model, optimizer, learning_rate, iteration, gbl_step
 
 
@@ -81,7 +82,7 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path,
     iteration, checkpoint_path))
   prev_cp_path = checkpoint_path.replace("latest", "previous")
   if os.path.exists(checkpoint_path):
-      os.rename(checkpoint_path, prev_cp_path)  
+      shutil.copy(checkpoint_path, prev_cp_path)  
   if hasattr(model, 'module'):
     state_dict = model.module.state_dict()
   else:

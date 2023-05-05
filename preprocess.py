@@ -1,5 +1,7 @@
 import argparse
 import text
+from tqdm import tqdm
+
 from utils import load_filepaths_and_text
 
 if __name__ == '__main__':
@@ -20,19 +22,19 @@ if __name__ == '__main__':
     print(f"preprocess: [{total_lines}] {filelist}")
     new_filelist = filelist[:-3] + args.out_extension
     with open(new_filelist, "w", encoding="utf-8") as f:
-      for i in range(total_lines):
-        replace_line_entry = filepaths_and_text[i]
-        original_text = filepaths_and_text[i][args.text_index]
-        cleaned_text = text._clean_text(original_text, args.text_cleaners)
-        replace_line_entry[args.text_index] = cleaned_text
-        pho_len = len(cleaned_text)
-        if (min_pho_len is None):
-          min_pho_len = pho_len
-        min_pho_len = min(min_pho_len, pho_len)
-        max_pho_len = max(max_pho_len, pho_len)
-        if (i % 100 == 0):
-          print(f"{i} / {total_lines}")
-        else:
-          print(".")
-        f.writelines("|".join(replace_line_entry) + "\n")
+      with tqdm(total=total_lines) as pbar:
+        for i in range(total_lines):
+          replace_line_entry = filepaths_and_text[i]
+          original_text = filepaths_and_text[i][args.text_index]
+          cleaned_text = text._clean_text(original_text, args.text_cleaners)
+          replace_line_entry[args.text_index] = cleaned_text
+          pho_len = len(cleaned_text)
+          if (min_pho_len is None):
+            min_pho_len = pho_len
+          min_pho_len = min(min_pho_len, pho_len)
+          max_pho_len = max(max_pho_len, pho_len)
+          if (i % 100 == 0):
+            print(f"{i} / {total_lines}")
+          f.writelines("|".join(replace_line_entry) + "\n")
+          pbar.update()
   print(f"pho lines> min({min_pho_len}), max({max_pho_len})")
