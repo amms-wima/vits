@@ -27,7 +27,7 @@ def load_checkpoint(checkpoint_path, model, optimizer=None):
     try:
       optimizer.load_state_dict(checkpoint_dict['optimizer'])
     except: 
-      logger.warn("optimizer was not loaded from checkpoint dictionary")
+      logger.warn("optimizer was not loaded from checkpoint dictionary", sys.exc_info())
   try:
     gbl_step = checkpoint_dict['gbl_step']
   except:
@@ -186,8 +186,10 @@ def get_hparams(init=True):
                       help='JSON file for configuration')
   parser.add_argument('-o', '--output_path', type=str, required=True,
                       help='Training output directory')
-  parser.add_argument('-ft', '--fine_tune', type=bool, default=False, 
+  parser.add_argument('-ft', '--fine_tune', type=int, default=0, 
                       help='set layers to be frozen when fine-tuning')
+  parser.add_argument('-lo', '--load_optimisation', type=int, default=1, 
+                      help='loads the optimisation in utils.load_checkpoint()')
   parser.add_argument('-s', '--start_global_step', type=int, default=-1, help='start global steps count [-1=system determined]')
   
   args = parser.parse_args()
@@ -210,7 +212,8 @@ def get_hparams(init=True):
   
   hparams = HParams(**config)
   hparams.model_dir = output_path
-  hparams.fine_tune = args.fine_tune
+  hparams.fine_tune = args.fine_tune == 1
+  hparams.load_optimisation = args.load_optimisation == 1
   hparams.start_global_step = args.start_global_step
 
   hparams.in_train_manifest_path = os.path.join(output_path, "in_train_manifest.json")
