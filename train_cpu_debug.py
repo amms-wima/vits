@@ -1,3 +1,4 @@
+import sys
 import os
 import torch
 import torch.nn as nn
@@ -28,7 +29,7 @@ from losses import (
 )
 from mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 from text.symbols import symbols
-
+from tqdm import tqdm
 
 torch.backends.cudnn.benchmark = True
 global_step = 0
@@ -122,21 +123,22 @@ def run(rank, n_gpus, hps):
   try:
     g_chkPointSrc = os.path.join(hps.model_dir, "G_latest.pth")
     d_chkPointSrc = os.path.join(hps.model_dir, "D_latest.pth")
-    _, _, _, epoch_str, global_step = utils.load_checkpoint(g_chkPointSrc, net_g, optim_g) 
+    _, _, _, epoch_str, global_step = utils.load_checkpoint(g_chkPointSrc, net_g, optim_g if hps.load_optimisation else None) 
     logger.info(f"Checkpoint epoch, step: G[{epoch_str}, {global_step}]")
     gen_loaded = True
-    _, _, _, epoch_strD, gsD = utils.load_checkpoint(d_chkPointSrc, net_d, optim_d)
+    _, _, _, epoch_strD, gsD = utils.load_checkpoint(d_chkPointSrc, net_d, optim_d if hps.load_optimisation else None)
     logger.info(f"Checkpoint epoch, step: D[{epoch_strD}, {gsD}]")
     dis_loaded = True
   except:
-    logger.warn(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}")
+    logger.warn(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}", sys.exc_info())
   hps.in_train_manifest["global_step_start"] = global_step
   if (epoch_str == 0):
     epoch_str = 1
   _freezing_layers_if_fine_tuning(hps, logger, net_g, net_d)
 
-  scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=hps.train.lr_decay, last_epoch=epoch_str-2)
-  scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=hps.train.lr_decay, last_epoch=epoch_str-2)
+  last_epoch_for_schlr = -1 if (hps.fine_tune) else epoch_str-2
+  scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
+  scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
 
   scaler = GradScaler(enabled=hps.train.fp16_run)
 
@@ -156,12 +158,12 @@ def _freezing_layers_if_fine_tuning(hps, logger, net_g, net_d):
       for name, param in net_g.named_parameters():
           param.requires_grad = True
           param_lst.append(name)
-      logger.info(f"freezing net_g layers: {param_lst}")
+      logger.debug(f"freezing net_g layers: {param_lst}")
       param_lst = []
       for name, param in net_d.named_parameters():
           param.requires_grad = True
           param_lst.append(name)
-      logger.info(f"freezing net_d layers: {param_lst}")
+      logger.debug(f"freezing net_d layers: {param_lst}")
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
@@ -177,7 +179,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 
   net_g.train()
   net_d.train()
-  for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(train_loader):
+  for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(tqdm(train_loader)):
     x, x_lengths = x.to(device, non_blocking=True), x_lengths.to(device, non_blocking=True)
     spec, spec_lengths = spec.to(device, non_blocking=True), spec_lengths.to(device, non_blocking=True)
     y, y_lengths = y.to(device, non_blocking=True), y_lengths.to(device, non_blocking=True)
