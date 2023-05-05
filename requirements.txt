@@ -8,3 +8,5 @@ tensorboard
 torch==1.13.1
 torchvision
 unidecode
+tqdm
+inflect

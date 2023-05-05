@@ -33,8 +33,6 @@ if __name__ == '__main__':
             min_pho_len = pho_len
           min_pho_len = min(min_pho_len, pho_len)
           max_pho_len = max(max_pho_len, pho_len)
-          if (i % 100 == 0):
-            print(f"{i} / {total_lines}")
           f.writelines("|".join(replace_line_entry) + "\n")
           pbar.update()
   print(f"pho lines> min({min_pho_len}), max({max_pho_len})")
