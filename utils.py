@@ -83,6 +83,8 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path,
   prev_cp_path = checkpoint_path.replace("latest", "previous")
   if os.path.exists(checkpoint_path):
       shutil.move(checkpoint_path, prev_cp_path)  
+  if os.path.exists(checkpoint_path):
+    os.remove(checkpoint_path)
   if hasattr(model, 'module'):
     state_dict = model.module.state_dict()
   else:
