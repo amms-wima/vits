@@ -134,9 +134,9 @@ def run(rank, n_gpus, hps):
   hps.in_train_manifest["global_step_start"] = global_step
   if (epoch_str == 0):
     epoch_str = 1
-  _freezing_layers_if_fine_tuning(hps, logger, net_g, net_d)
+  _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d)
 
-  last_epoch_for_schlr = -1 if (hps.fine_tune) else epoch_str-2
+  last_epoch_for_schlr = epoch_str-2 if (hps.load_optimisation) else -1
   scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
   scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
 
@@ -151,7 +151,7 @@ def run(rank, n_gpus, hps):
     scheduler_d.step()
 
 
-def _freezing_layers_if_fine_tuning(hps, logger, net_g, net_d):
+def _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d):
     if (hps.fine_tune):
     # freeze all other layers except speaker embedding
       param_lst = []
