@@ -10,3 +10,4 @@ torchvision
 unidecode
 tqdm
 inflect
+pysbd

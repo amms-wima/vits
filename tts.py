@@ -10,6 +10,7 @@ import argparse
 import re
 import numpy as np
 
+import pysbd
 from text.symbols import symbols
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -42,6 +43,10 @@ if __name__ == "__main__":
     noise_scale_w = args.noise_scale_w
     length = args.length_scale
 
+    segmenter = pysbd.Segmenter(language="en", clean=False)
+    segmenter.language_module.Abbreviation.ABBREVIATIONS.append('ven')
+    segmenter.language_module.Abbreviation.PREPOSITIVE_ABBREVIATIONS.append('ven')
+
     hps = utils.get_hparams_from_file(config_path)
     net_g = SynthesizerTrn(
         len(symbols),
@@ -52,8 +57,19 @@ if __name__ == "__main__":
     _ = net_g.eval()
     _ = utils.load_checkpoint(model_path, net_g, None)
 
-    def _split_into_segment(text: str) -> list[str]:
-        segments = re.split(r'(?<=[^A-Z].[.?!;:…])\s+', text)
+
+    def _split_using_remaining_puncs(text: str) -> list[str]:
+        segments = re.split(r'(?<=[^A-Z].[;:…])\s+', text)
+        return segments
+
+
+    def _split_into_segments(text: str) -> list[str]:
+        sentences = segmenter.segment(text)
+        segments = []
+        for sentence in sentences:
+            sen_trimmed = sentence.strip()
+            subs = _split_using_remaining_puncs(sen_trimmed)
+            segments += subs
         return segments
 
     def _query_pause_duration(punctuation):
@@ -66,6 +82,7 @@ if __name__ == "__main__":
         else:
             pause_duration = 0        
         return pause_duration
+    
 
     def _concat_audio_segment(file_audio, seg_audio, pause_duration):
         pause_samples = int(pause_duration * hps.data.sampling_rate)
@@ -75,6 +92,7 @@ if __name__ == "__main__":
         else:
             file_audio = np.concatenate((file_audio, seg_audio, pause_audio))
         return file_audio
+
 
     def _synthesize_segment(text):
         audio = None
@@ -88,11 +106,13 @@ if __name__ == "__main__":
         del stn_tst, x_tst, x_tst_lengths, sid
         return audio
 
+
     def _clean_segment(text):
         REMOVE_LIST = ["\"", "'", "“", "”"]
         for punc in REMOVE_LIST:
             ret = text.replace(punc, "")
         return ret
+
 
     def _synthesize_file():
         file_audio = None
@@ -101,7 +121,7 @@ if __name__ == "__main__":
                 text = text.strip()
                 if (text == ''):
                     continue
-                text_segments = _split_into_segment(text) 
+                text_segments = _split_into_segments(text) 
                 for j, text_seg in enumerate(text_segments):
                     cleaned_seg = _clean_segment(text_seg.strip())
                     seg_audio = _synthesize_segment(cleaned_seg)

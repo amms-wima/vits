@@ -22,5 +22,6 @@ abbreviations_en = [
         ("ltd", "limited"),
         ("col", "colonel"),
         ("ft", "fort"),
+        ("ven", "venerable"),
     ]
 ]
