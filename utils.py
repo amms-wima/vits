@@ -18,6 +18,26 @@ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logger = logging
 
 
+def query_checkpoint(checkpoint_path):
+  assert os.path.isfile(checkpoint_path)
+  checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
+  iteration = checkpoint_dict['iteration']
+  learning_rate = checkpoint_dict['learning_rate']
+  try:
+    gbl_step = checkpoint_dict['gbl_step']
+  except:
+    gbl_step = 0
+  logger.info("Loaded checkpoint '{}' (step/iteration): {}/{}" .format(checkpoint_path, gbl_step, iteration))
+  logger.info(f"\tlr: {learning_rate}")
+  saved_state_dict = checkpoint_dict['model']
+  if "enc_p.emb.weight" in saved_state_dict:
+    num_rows_enc_checkpoint = saved_state_dict["enc_p.emb.weight"].shape[0]
+    logger.info(f"\tenc_p.emb.weight rows: {num_rows_enc_checkpoint}")
+  if "emb_g.weight" in saved_state_dict:
+    num_rows_emb_checkpoint = saved_state_dict["emb_g.weight"].shape[0]
+    logger.info(f"\temb_g.weight rows: {num_rows_emb_checkpoint}")
+    
+
 def load_checkpoint(checkpoint_path, model, optimizer=None):
   assert os.path.isfile(checkpoint_path)
   checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
