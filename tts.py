@@ -114,6 +114,11 @@ if __name__ == "__main__":
         return ret
 
 
+    def _save_wav(wav, rate, path):
+        wav *= 32767 / max(0.01, np.max(np.abs(wav))) * 0.6
+        wavf.write(path, rate, wav.astype(np.int16))
+
+
     def _synthesize_file():
         file_audio = None
         with open(args.text_file, 'r') as f:
@@ -128,6 +133,6 @@ if __name__ == "__main__":
                     pause_dur = _query_pause_duration(text_seg[-1])
                     print(f"{text_seg} [{pause_dur}]")
                     file_audio = _concat_audio_segment(file_audio, seg_audio, pause_dur)
-        wavf.write(output_name, hps.data.sampling_rate, np.array(file_audio))
+        _save_wav(file_audio, hps.data.sampling_rate, output_name)
     
     _synthesize_file()

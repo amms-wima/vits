@@ -7,7 +7,7 @@ logs
 __pycache__
 .ipynb_checkpoints
 .*.swp
-
+test
 build
 *.c
 monotonic_align/monotonic_align

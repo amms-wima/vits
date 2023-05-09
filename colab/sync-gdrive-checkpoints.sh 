@@ -1,0 +1,62 @@
+#!/bin/bash
+
+function install_inotify_tools() {
+    if ! command -v inotifywait >/dev/null; then
+        echo "Installing inotify-tools package..."
+        sudo apt-get install -y inotify-tools
+    fi
+}
+
+function sync_gdrive_checkpoints() {
+    if [ "${VITS_DEBUG}" = "1" ]; then
+        echo "sync_gdrive_checkpoints"
+    fi
+    local vits_root="$1"
+    local vits_sync_root="$2"
+
+    while true; do
+        # Monitor events in the source directory
+        inotifywait -r -e modify,create,delete "$vits_root/build"
+
+        # Trigger rsync to synchronize changes
+        rsync -av --delete "$vits_root/build/" "$vits_sync_root/build/"
+    done
+}
+
+function main() {
+    local vits_root=""
+    local vits_sync_root=""
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -s)
+                shift
+                vits_sync_root="$1"
+                ;;
+            *)
+                vits_root="$1"
+                ;;
+        esac
+        shift
+    done
+
+    if [[ -z $vits_root ]] || [[ -z $vits_sync_root ]]; then
+        echo "ERROR: vits_root and vits_sync_root directories must be specified with -s option!"
+        exit 1
+    fi
+
+    if [[ ! -d $vits_root ]]; then
+        echo "ERROR: vits_root directory does not exist: $vits_root"
+        exit 1
+    fi
+
+    if [[ ! -d $vits_sync_root ]]; then
+        echo "ERROR: vits_sync_root directory does not exist: $vits_sync_root"
+        exit 1
+    fi
+
+    install_inotify_tools
+    sync_gdrive_checkpoints "$vits_root" "$vits_sync_root"
+}
+
+main "$@"
