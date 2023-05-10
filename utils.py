@@ -1,4 +1,3 @@
-import re
 import os
 import glob
 import sys
@@ -97,12 +96,23 @@ def _get_nested_attr(src, dot_sep_attr_spec):
   return ret
 
 
-def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path, gbl_step=0):
+def sync_checkpoint(checkpoint, prev_cp, hps):
+  sync_latest_cp_path = os.path.join(hps.model_dir, checkpoint)
+  sync_checkpoint_path = os.path.join(hps.model_sync_folder, checkpoint)
+  sync_prev_cp_path = os.path.join(hps.model_sync_folder, prev_cp)
+  if os.path.exists(sync_checkpoint_path):
+      shutil.move(sync_checkpoint_path, sync_prev_cp_path)
+  shutil.copy2(sync_latest_cp_path, sync_checkpoint_path)
+
+
+def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint, gbl_step=0, hps=None):
+  prev_cp = checkpoint.replace("latest", "previous")
+  checkpoint_path = os.path.join(hps.model_dir, checkpoint)
   logger.info("Saving model and optimizer state at iteration {} to {}".format(
     iteration, checkpoint_path))
-  prev_cp_path = checkpoint_path.replace("latest", "previous")
-  if os.path.exists(prev_cp_path):
-    os.remove(prev_cp_path)
+  prev_cp_path = os.path.join(hps.model_dir, prev_cp)
+  # if os.path.exists(prev_cp_path):
+  #   os.remove(prev_cp_path)
   if os.path.exists(checkpoint_path):
       shutil.move(checkpoint_path, prev_cp_path)  
   if hasattr(model, 'module'):
@@ -115,6 +125,8 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path,
               'learning_rate': learning_rate,
               'gbl_step': gbl_step,
               }, checkpoint_path)
+  if (hps.model_sync_folder is not None):
+    sync_checkpoint(checkpoint,prev_cp, hps)
 
 
 def summarize(writer, global_step, scalars={}, histograms={}, images={}, audios={}, audio_sampling_rate=22050):
@@ -208,11 +220,12 @@ def get_hparams(init=True):
                       help='JSON file for configuration')
   parser.add_argument('-o', '--output_path', type=str, required=True,
                       help='Training output directory')
-  parser.add_argument('-ft', '--fine_tune', type=int, default=0, 
+  parser.add_argument('-fl', '--freeze_layers', type=int, default=0, 
                       help='set layers to be frozen when fine-tuning')
   parser.add_argument('-lo', '--load_optimisation', type=int, default=1, 
                       help='loads the optimisation in utils.load_checkpoint()')
   parser.add_argument('-s', '--start_global_step', type=int, default=-1, help='start global steps count [-1=system determined]')
+  parser.add_argument('-msf', '--model_sync_folder', type=str, default=None, help='sync the model files to a sync folder (eg. /content/drive/MyDrive/vits/build)')
   
   args = parser.parse_args()
   output_path = os.path.join("./", args.output_path)
@@ -234,9 +247,10 @@ def get_hparams(init=True):
   
   hparams = HParams(**config)
   hparams.model_dir = output_path
-  hparams.fine_tune = args.fine_tune == 1
+  hparams.freeze_layers = args.freeze_layers == 1
   hparams.load_optimisation = args.load_optimisation == 1
   hparams.start_global_step = args.start_global_step
+  hparams.model_sync_folder= args.model_sync_folder
 
   hparams.in_train_manifest_path = os.path.join(output_path, "in_train_manifest.json")
   hparams.in_train_manifest = {}
@@ -269,6 +283,8 @@ def save_in_train_manifest(hps, iteration, glb_step):
 
     with open(hps.in_train_manifest_path, "w") as f:
         json.dump(hps.in_train_manifest, f, indent=2)
+    if (hps.model_sync_folder is not None):
+      shutil.copy2(hps.in_train_manifest_path, hps.model_sync_folder)
 
 
 def get_hparams_from_dir(model_dir):

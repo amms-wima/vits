@@ -7,6 +7,7 @@ scipy
 tensorboard
 torch==1.13.1
 torchvision
+torchaudio
 unidecode
 tqdm
 inflect

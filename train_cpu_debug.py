@@ -1,9 +1,10 @@
 import sys
 import os
 import torch
+import torchaudio
 import torch.nn as nn
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.utils.tensorboard import SummaryWriter
 import torch.multiprocessing as mp
 import torch.distributed as dist
@@ -76,16 +77,16 @@ def run(rank, n_gpus, hps):
   torch.manual_seed(hps.train.seed)
 
   train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps.data)
-  train_sampler = DistributedBucketSampler(
-      train_dataset,
-      hps.train.batch_size,
-      [32,300,400,500,600,700,800,900,1000],
-      num_replicas=n_gpus,
-      rank=rank,
-      shuffle=True)
   collate_fn = TextAudioSpeakerCollate()
+
+  dist_bucket_sampler = None
+  weighted_sampler = None
+  if (hasattr(hps.train, "use_weighted_sampler") and hps.train.use_weighted_sampler):
+    weighted_sampler = create_weighted_sampler(hps, train_dataset)
+  else:
+    dist_bucket_sampler = _create_batch_sampler(rank, n_gpus, hps, train_dataset)
   train_loader = DataLoader(train_dataset, num_workers=2, shuffle=False, pin_memory=True,
-      collate_fn=collate_fn, batch_sampler=train_sampler)
+      collate_fn=collate_fn, batch_sampler=dist_bucket_sampler, sampler=weighted_sampler)
   if rank == 0:
     eval_dataset = TextAudioSpeakerLoader(hps.data.validation_files, hps.data)
     eval_loader = DataLoader(eval_dataset, num_workers=2, shuffle=False,
@@ -131,6 +132,9 @@ def run(rank, n_gpus, hps):
     dis_loaded = True
   except:
     logger.warn(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}", sys.exc_info())
+  if (hps.start_global_step > -1):
+    global_step = hps.start_global_step
+    logger.info(f"Resetting global step start: {global_step}")
   hps.in_train_manifest["global_step_start"] = global_step
   if (epoch_str == 0):
     epoch_str = 1
@@ -151,8 +155,41 @@ def run(rank, n_gpus, hps):
     scheduler_d.step()
 
 
+def _create_batch_sampler(rank, n_gpus, hps, train_dataset):
+    sampler = DistributedBucketSampler(
+      train_dataset,
+      hps.train.batch_size,
+      [32,300,400,500,600,700,800,900,1000],
+      num_replicas=n_gpus,
+      rank=rank,
+      shuffle=True)
+    return sampler
+
+
+def create_weighted_sampler(hps, dataset):
+    # Collect the audio durations per speaker
+    speaker_durations = {}
+    for index in range(len(dataset)):
+        audio_path = dataset.audiopaths_sid_text[index][0]
+        speaker_id = int(dataset.audiopaths_sid_text[index][1])
+        audio_info = torchaudio.info(audio_path)
+        duration = audio_info.num_frames / audio_info.sample_rate
+        if speaker_id not in speaker_durations:
+            speaker_durations[speaker_id] = 0.0
+        speaker_durations[speaker_id] += duration
+    
+    # Compute the inverse of the speaker durations
+    total_duration = sum(speaker_durations.values())
+    sample_weights = [total_duration / speaker_durations[speaker_id] for speaker_id in range(len(speaker_durations))]
+
+    # Create the WeightedRandomSampler object
+    class_counts = [len(dataset) / len(speaker_durations)] * len(speaker_durations)
+    sampler = WeightedRandomSampler(sample_weights, int(sum(class_counts)))
+    return sampler
+
+
 def _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d):
-    if (hps.fine_tune):
+    if (hps.freeze_layers):
     # freeze all other layers except speaker embedding
       param_lst = []
       for name, param in net_g.named_parameters():
@@ -167,6 +204,7 @@ def _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d):
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
+  global global_step
   net_g, net_d = nets
   optim_g, optim_d = optims
   scheduler_g, scheduler_d = schedulers
@@ -174,8 +212,8 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
   if writers is not None:
     writer, writer_eval = writers
 
-  train_loader.batch_sampler.set_epoch(epoch)
-  global global_step
+  if (hasattr(train_loader.batch_sampler, "set_epoch")):
+    train_loader.batch_sampler.set_epoch(epoch)
 
   net_g.train()
   net_d.train()
@@ -287,11 +325,12 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 def _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d):
     global global_step
     utils.save_in_train_manifest(hps, epoch, global_step)
-    utils.save_checkpoint(net_g, optim_g, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "G_latest.pth"), global_step)
-    utils.save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "D_latest.pth"), global_step)
+    utils.save_checkpoint(net_g, optim_g, hps.train.learning_rate, epoch, "G_latest.pth", global_step, hps)
+    utils.save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch, "D_latest.pth", global_step, hps)
 
  
 def evaluate(hps, generator, eval_loader, writer_eval):
+    global global_step
     generator.eval()
     with torch.no_grad():
       for batch_idx, (x, x_lengths, spec, spec_lengths, y, y_lengths, speakers) in enumerate(eval_loader):
