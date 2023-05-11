@@ -224,6 +224,8 @@ def get_hparams(init=True):
                       help='set layers to be frozen when fine-tuning')
   parser.add_argument('-lo', '--load_optimisation', type=int, default=1, 
                       help='loads the optimisation in utils.load_checkpoint()')
+  parser.add_argument('-rlroe', '--reset_learning_rate_optimiser_epoch', type=int, default=0, 
+                      help='uses -1 for torch.optim.lr_scheduler.ExponentialLR if set')
   parser.add_argument('-s', '--start_global_step', type=int, default=-1, help='start global steps count [-1=system determined]')
   parser.add_argument('-msf', '--model_sync_folder', type=str, default=None, help='sync the model files to a sync folder (eg. /content/drive/MyDrive/vits/build)')
   
@@ -249,6 +251,7 @@ def get_hparams(init=True):
   hparams.model_dir = output_path
   hparams.freeze_layers = args.freeze_layers == 1
   hparams.load_optimisation = args.load_optimisation == 1
+  hparams.reset_learning_rate_optimiser_epoch = args.reset_learning_rate_optimiser_epoch == 1
   hparams.start_global_step = args.start_global_step
   hparams.model_sync_folder= args.model_sync_folder
 

@@ -12,19 +12,16 @@ function download_datasets() {
 }
 
 function process_csv_file() {
+    local csv_file="$1"
     if [ "${VITS_DEBUG}" = "1" ]; then
         echo "process_csv_file: $csv_file"
     fi
-
-    # local csv_file="$1"
 
     while IFS= read -r line; do
         IFS='|' read -ra row_data <<< "$line"
         gdown_id="${row_data[0]}"
         archive="${row_data[1]}"
 
-        # echo "$gdown_id"
-        # echo "$archive"
         gdown "$gdown_id"
         tar xzvf "$archive"
     done < "$csv_file"
@@ -40,20 +37,6 @@ function create_sym_links() {
     ln -s /content/tts-dataset/ training_data
 }
 
-function test_metadata_links() {
-    if [ "${VITS_DEBUG}" = "1" ]; then
-        echo "test_metadata_links"
-    fi
-    local vits_root="$1"
-
-    echo "test_metadata_links"
-
-    # make sure the training & eval metadata files are there
-    ls -la "$vits_root/training_data/metadata/asw_vctk_train.cleaned.csv"
-    ls -la "$vits_root/training_data/metadata/asw_vctk_eval.cleaned.csv"
-    ls -la "$vits_root/training_data/metadata/asw_vctk_train_vits.json"
-}
-
 function main() {
     local vits_root=""
 
@@ -64,9 +47,6 @@ function main() {
                 ;;
             -s)
                 create_symlinks=true
-                ;;
-            -t)
-                run_tests=true
                 ;;
             -f)
                 shift
@@ -90,10 +70,6 @@ function main() {
 
     if [[ $create_symlinks ]]; then
         create_sym_links "$vits_root"
-    fi
-
-    if [[ $run_tests ]]; then
-        test_metadata_links "$vits_root"
     fi
 }
 

@@ -6,7 +6,7 @@ function install_sys_packages() {
     fi
     
     sudo apt-get install mc -y
-    # sudo apt-get install espeak -y
+    sudo apt-get install espeak -y
 }
 
 function install_vits_project() {
@@ -22,10 +22,11 @@ function install_vits_project() {
     echo "  cloning git repo"
     git clone https://github.com/amms-wima/vits.git
     cd vits
-    git checkout feat_dual_cuda_cpu
+    git checkout alt-main
     
     echo "  build monotonic_align"
     cd monotonic_align  
+    mkdir monotonic_align
     python setup.py build_ext --inplace
 
     mkdir -p build
@@ -40,7 +41,7 @@ function install_vits_dependencies() {
     cd "$vits_root"
     pwd
     pip install -U pip setuptools wheel
-    # pip install -r requirements.txt
+    pip install -r requirements.txt
 }
 
 function check_if_using_gpu() {
@@ -58,11 +59,22 @@ function check_if_using_gpu() {
 
 function main() {
     local vits_root=""
+    local skip_git=false
+    local gpu_check=false
+    local sync_model_folder=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             -g)
                 gpu_check=true
+                ;;
+            -sg)
+                skip_git=true
+                ;;
+            -csmf)
+                shift
+                sync_model_folder=$1
+                mkdir -p "$sync_model_folder"
                 ;;
             *)
                 vits_root=$1
@@ -71,14 +83,15 @@ function main() {
         shift
     done
     
-    
     if [[ $gpu_check ]]; then
         check_if_using_gpu
     fi    
 
     if [[ $vits_root ]]; then
         install_sys_packages
-        install_vits_project "$vits_root"
+        if [[ $skip_git = false ]]; then
+            install_vits_project "$vits_root"
+        fi
         install_vits_dependencies "$vits_root"
     fi
 }

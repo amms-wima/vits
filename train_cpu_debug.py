@@ -140,7 +140,7 @@ def run(rank, n_gpus, hps):
     epoch_str = 1
   _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d)
 
-  last_epoch_for_schlr = epoch_str-2 if (hps.load_optimisation) else -1
+  last_epoch_for_schlr = -1 if (hps.reset_learning_rate_optimiser_epoch) else epoch_str-2 
   scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
   scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
 
