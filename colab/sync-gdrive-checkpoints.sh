@@ -26,7 +26,7 @@ function sync_gdrive_checkpoints() {
     inotifywait -e close_write -q --timefmt '%T' --format '%T %e %f' -m "$vits_build" |
     while read -r timestamp event file
     do
-        echo "$last_event", "$last_file", "$last_ts", " | ", "$event", "$file", "$timestamp"
+        echo "$event", "$file", "$timestamp"
         current_ts=$(date -d "$timestamp" +%s)
         last_ts=$(date -d "$last_ts" +%s)
         time_diff=$((current_ts - last_ts))

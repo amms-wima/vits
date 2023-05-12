@@ -305,7 +305,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
           images=image_dict,
           scalars=scalar_dict)
 
-      utils.update_abort_requested_from_in_train_manifest(hps)
+      utils.adjust_training_via_in_train_manifest_edits(hps)
       already_saved = False
       if global_step % hps.train.eval_interval == 0:
         evaluate(hps, net_g, eval_loader, writer_eval)

@@ -263,19 +263,26 @@ def get_hparams(init=True):
   hparams.in_train_manifest["iteration"] = -1
   hparams.in_train_manifest["previous_step"] = -1
   hparams.in_train_manifest["latest_step"] = -1  
+  hparams.in_train_manifest["after_save"] = False  
+  hparams.in_train_manifest["chg_eval_interval"] = -1
   return hparams
 
 
-def update_abort_requested_from_in_train_manifest(hps):
+def adjust_training_via_in_train_manifest_edits(hps):
     if os.path.exists(hps.in_train_manifest_path):
         with open(hps.in_train_manifest_path, "r") as f:
             data = f.read()
             config = json.loads(data)
-            if "abort_on_next_iteration" in config:
+            if ("abort_on_next_iteration" in config):
                 is_abort = config["abort_on_next_iteration"]
                 hps.in_train_manifest["abort_on_next_iteration"] = is_abort
                 if is_abort:
                     logger.warn("Abort flagged in training!")
+            if ("chg_eval_interval" in config):
+              if (config["chg_eval_interval"] != -1):
+                  new_eval_intv = config["chg_eval_interval"]
+                  hps.in_train_manifest["chg_eval_interval"] = new_eval_intv
+                  hps.train.eval_interval = new_eval_intv
 
 
 def save_in_train_manifest(hps, iteration, glb_step, after_save=True):
