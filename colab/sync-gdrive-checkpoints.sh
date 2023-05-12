@@ -39,14 +39,16 @@ function sync_gdrive_checkpoints() {
         last_ts="$timestamp"
         case $event in
             CLOSE_WRITE*)
-                if [[ $file == "G_latest.pth" || $file == "D_latest.pth" ]]; then
+                if [[ $file == "G_latest.pth" || $file == "D_latest.pth" || $file == "in_train_manifest.json" || $file == "config.json" ]]; then
                     source_file="$vits_build/$file"
                     destination_dir="$vits_sync_build"
-                    if [[ -f "$destination_dir/$file" ]]; then
-                        previous_file="${file/latest/previous}"
-                        mv "$destination_dir/$file" "$destination_dir/$previous_file"
+                    if [[ $file == "G_latest.pth" || $file == "D_latest.pth" ]]; then
+                        if [[ -f "$destination_dir/$file" ]]; then
+                            previous_file="${file/latest/previous}"
+                            mv "$destination_dir/$file" "$destination_dir/$previous_file"
+                        fi
+                        sleep "$wait_dur"  # Add a delay after each file write for large files
                     fi
-                    sleep "$wait_dur"  # Add a delay after each file operation
                     cp "$source_file" "$destination_dir/$file"
                     echo "File copied: $source_file -> $destination_dir/$file"
                 fi

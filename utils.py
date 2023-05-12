@@ -278,12 +278,13 @@ def update_abort_requested_from_in_train_manifest(hps):
                     logger.warn("Abort flagged in training!")
 
 
-def save_in_train_manifest(hps, iteration, glb_step):
-    hps.in_train_manifest["last_updated"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    hps.in_train_manifest["iteration"] = iteration
-    hps.in_train_manifest["previous_step"] = hps.in_train_manifest["latest_step"] 
-    hps.in_train_manifest["latest_step"] = glb_step
-
+def save_in_train_manifest(hps, iteration, glb_step, after_save=True):
+    hps.in_train_manifest["last_updated"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S') 
+    hps.in_train_manifest["after_save"] = after_save  # in case of IO exception the manifest is updated before/after
+    if (after_save):
+      hps.in_train_manifest["iteration"] = iteration
+      hps.in_train_manifest["previous_step"] = hps.in_train_manifest["latest_step"] 
+      hps.in_train_manifest["latest_step"] = glb_step
     with open(hps.in_train_manifest_path, "w") as f:
         json.dump(hps.in_train_manifest, f, indent=2)
     if (hps.model_sync_folder is not None):

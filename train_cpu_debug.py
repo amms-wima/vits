@@ -141,6 +141,7 @@ def run(rank, n_gpus, hps):
   _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d)
 
   last_epoch_for_schlr = -1 if (hps.reset_learning_rate_optimiser_epoch) else epoch_str-2 
+  logger.info(f"Using optim.lr_scheduler.ExponentialLR(last_epoch={last_epoch_for_schlr})")
   scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
   scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
 
@@ -324,9 +325,10 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 
 def _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d):
     global global_step
-    utils.save_in_train_manifest(hps, epoch, global_step)
+    utils.save_in_train_manifest(hps, epoch, global_step, False)
     utils.save_checkpoint(net_g, optim_g, hps.train.learning_rate, epoch, "G_latest.pth", global_step, hps)
     utils.save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch, "D_latest.pth", global_step, hps)
+    utils.save_in_train_manifest(hps, epoch, global_step, True)
 
  
 def evaluate(hps, generator, eval_loader, writer_eval):
