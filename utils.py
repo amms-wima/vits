@@ -111,9 +111,7 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint, gbl_
   logger.info("Saving model and optimizer state at iteration {} to {}".format(
     iteration, checkpoint_path))
   prev_cp_path = os.path.join(hps.model_dir, prev_cp)
-  # if os.path.exists(prev_cp_path):
-  #   os.remove(prev_cp_path)
-  if os.path.exists(checkpoint_path):
+  if (hps.save_prev_backup and os.path.exists(checkpoint_path)):
       shutil.move(checkpoint_path, prev_cp_path)  
   if hasattr(model, 'module'):
     state_dict = model.module.state_dict()
@@ -226,6 +224,8 @@ def get_hparams(init=True):
                       help='loads the optimisation in utils.load_checkpoint()')
   parser.add_argument('-rlroe', '--reset_learning_rate_optimiser_epoch', type=int, default=0, 
                       help='uses -1 for torch.optim.lr_scheduler.ExponentialLR if set')
+  parser.add_argument('-spb', '--save_prev_backup', type=int, default=1, 
+                      help='set to 0 only when using an external backup utility otherwise ?_latest.pth will not be saved to ?_previous.pth')
   parser.add_argument('-s', '--start_global_step', type=int, default=-1, help='start global steps count [-1=system determined]')
   parser.add_argument('-msf', '--model_sync_folder', type=str, default=None, help='sync the model files to a sync folder (eg. /content/drive/MyDrive/vits/build)')
   
@@ -254,6 +254,7 @@ def get_hparams(init=True):
   hparams.reset_learning_rate_optimiser_epoch = args.reset_learning_rate_optimiser_epoch == 1
   hparams.start_global_step = args.start_global_step
   hparams.model_sync_folder= args.model_sync_folder
+  hparams.save_prev_backup= args.save_prev_backup == 1
 
   hparams.in_train_manifest_path = os.path.join(output_path, "in_train_manifest.json")
   hparams.in_train_manifest = {}

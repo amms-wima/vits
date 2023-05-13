@@ -13,7 +13,7 @@ function bundle_model_on_after_save() {
 
     if [[ -f "$manifest_file" ]]; then
         latest_step=$(sed -n '7s/.*: \([0-9]*\),/\1/p' "$manifest_file")
-        after_save=$(sed -n '8s/.*: \(.*\)/\1/p' "$manifest_file")
+        after_save=$(sed -n '8s/.*: \([^,]*\)\(,\)\{0,1\}/\1/p' "$manifest_file")
   
         if [[ "$after_save" == "true" ]]; then
             pushd "$vits_sync_build" || exit 1
