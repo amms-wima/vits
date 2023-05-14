@@ -141,8 +141,10 @@ def sync_checkpoint(checkpoint, prev_cp, hps):
 
 
 def save_if_best_model(curr_losses, best_losses, epoch, hps, net_g, net_d, optim_g, optim_d, gbl_step):
-  curr_summed_losses = sum(curr_losses)
-  best_summed_losses = sum(best_losses)
+  if (curr_losses is not None):
+    curr_summed_losses = sum(curr_losses)
+  if (best_losses is not None):
+    best_summed_losses = sum(best_losses)
   hps.in_train_manifest["summed_losses"] = curr_summed_losses
   if best_losses is None or curr_summed_losses < best_summed_losses:
     best_losses = curr_losses
