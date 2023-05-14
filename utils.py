@@ -141,6 +141,8 @@ def sync_checkpoint(checkpoint, prev_cp, hps):
 
 
 def save_if_best_model(curr_losses, best_losses, epoch, hps, net_g, net_d, optim_g, optim_d, gbl_step):
+  curr_summed_losses = -1
+  best_summed_losses = -1
   if (curr_losses is not None):
     curr_summed_losses = sum(curr_losses)
   if (best_losses is not None):
