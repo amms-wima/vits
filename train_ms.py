@@ -269,7 +269,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
         logger.info('Train Epoch: {} [{:.0f}%]'.format(
           epoch,
           100. * batch_idx / len(train_loader)))
-        logger.info([x.item() for x in losses] + [global_step, lr])
+        logger.info(f"{global_step}> lr: {round(lr, 5)}, sum: {round(sum(losses).item(), 5)} = ", [round(x.item(), 5) for x in losses])
         
         scalar_dict = {"loss/g/total": loss_gen_all, "loss/d/total": loss_disc_all, "learning_rate": lr, "grad_norm_d": grad_norm_d, "grad_norm_g": grad_norm_g}
         scalar_dict.update({"loss/g/fm": loss_fm, "loss/g/mel": loss_mel, "loss/g/dur": loss_dur, "loss/g/kl": loss_kl})
@@ -289,14 +289,14 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
           images=image_dict,
           scalars=scalar_dict)
 
-      utils.reload_in_train_manifest(hps)
-      already_saved = False
       if global_step % hps.train.eval_interval == 0:
+        utils.reload_in_train_manifest(hps)
+        already_saved = False
         evaluate(hps, net_g, eval_loader, writer_eval)
         if (global_step > hps.in_train_manifest["global_step_start"]):
           utils.save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d, global_step, False)
           already_saved = True
-      if (hps.in_train_manifest["abort_on_next_iteration"] == True):
+        if (hps.in_train_manifest["abort_on_next_iteration"] == True):
           if (not already_saved):
             utils.save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d, global_step, False)
           exit()

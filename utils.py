@@ -141,10 +141,14 @@ def sync_checkpoint(checkpoint, prev_cp, hps):
 
 
 def save_if_best_model(curr_losses, best_losses, epoch, hps, net_g, net_d, optim_g, optim_d, gbl_step):
-  if best_losses is None or sum(curr_losses) < sum(best_losses):
+  curr_summed_losses = sum(curr_losses)
+  best_summed_losses = sum(best_losses)
+  hps.in_train_manifest["summed_losses"] = curr_summed_losses
+  if best_losses is None or curr_summed_losses < best_summed_losses:
     best_losses = curr_losses
     hps.in_train_manifest["best_model"]["iteration"] = epoch
     hps.in_train_manifest["best_model"]["step"] = gbl_step
+    hps.in_train_manifest["best_model"]["summed_losses"] = best_summed_losses
     hps.in_train_manifest["best_model"]["losses"] = best_losses
     save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d, gbl_step, True)
   return best_losses
@@ -153,12 +157,12 @@ def save_if_best_model(curr_losses, best_losses, epoch, hps, net_g, net_d, optim
 def save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d, gbl_step, is_best=False):
     prefix = "^" if is_best else "_"
     save_in_train_manifest(hps, epoch, gbl_step, False)
-    save_checkpoint(net_g, optim_g, hps.train.learning_rate, epoch, f"G{prefix}latest.pth", gbl_step, hps)
-    save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch, f"D{prefix}latest.pth", gbl_step, hps)
+    save_checkpoint(net_g, optim_g, hps.train.learning_rate, epoch, f"G{prefix}latest.pth", gbl_step, hps, is_best)
+    save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch, f"D{prefix}latest.pth", gbl_step, hps, is_best)
     save_in_train_manifest(hps, epoch, gbl_step, True)
 
 
-def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint, gbl_step=0, hps=None):
+def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint, gbl_step=0, hps=None, is_best=False):
   prev_cp = checkpoint.replace("latest", "previous")
   checkpoint_path = os.path.join(hps.model_dir, checkpoint)
   logger.info("Saving model and optimizer state at iteration {} to {}".format(
@@ -170,13 +174,17 @@ def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint, gbl_
     state_dict = model.module.state_dict()
   else:
     state_dict = model.state_dict()
-  torch.save({'model': state_dict,
-              'iteration': iteration,
-              'optimizer': optimizer.state_dict(),
-              'learning_rate': learning_rate,
-              'best_losses': hps.in_train_manifest["best_model"]["losses"],
-              'gbl_step': gbl_step,
-              }, checkpoint_path)
+  mdl_metadata = {
+    'model': state_dict,
+    'iteration': iteration,
+    'optimizer': optimizer.state_dict(),
+    'learning_rate': learning_rate,
+    'summed_losses': hps.in_train_manifest["summed_losses"],
+    'gbl_step': gbl_step,
+  }
+  if (is_best):
+    mdl_metadata['best_losses'] = hps.in_train_manifest["best_model"]["losses"]
+  torch.save(mdl_metadata, checkpoint_path)
   if (hps.model_sync_folder is not None):
     sync_checkpoint(checkpoint, prev_cp, hps)
 
