@@ -24,7 +24,7 @@ def get_text(text, hps):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='vits tts')
-    parser.add_argument('-m', '--model_path', type=str, default="./build/G_latest.pth")
+    parser.add_argument('-m', '--model_path', type=str, default="./build/G^latest.pth")
     parser.add_argument('-c', '--config_path', type=str, default="./build/config.json")
     parser.add_argument('-s', '--sid', type=int)
     parser.add_argument('-t', '--text_file', type=str, required=True)

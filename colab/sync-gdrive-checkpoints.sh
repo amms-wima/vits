@@ -18,17 +18,19 @@ function sync_gdrive_checkpoints() {
     local last_ts=""
 
     if [ "${VITS_DEBUG}" = "1" ]; then
-        echo "sync_gdrive_checkpoints $vits_sync_build"
+        echo "sync_gdrive_checkpoints $vits_build -> $vits_sync_build"
     fi
 
     mkdir -p "$vits_sync_build"
 
-    inotifywait -e close_write -q --timefmt '%T' --format '%T %e %f' -m "$vits_build" |
+    inotifywait -e close_write -q --timefmt '%Y-%m-%d %H:%M:%S' --format '%T %e %f' -m "$vits_build" |
     while read -r timestamp event file
     do
-        echo "$event", "$file", "$timestamp"
-        current_ts=$(date -d "$timestamp" +%s)
-        last_ts=$(date -d "$last_ts" +%s)
+        if [ "${VITS_DEBUG}" = "1" ]; then
+            echo "$event", "$file", "$timestamp"
+        fi
+        current_ts=$(date -d "$(date -d "$timestamp" +%T)" +%s)
+        last_ts=$(date -d "$(date -d "$last_ts" +%T)" +%s)
         time_diff=$((current_ts - last_ts))
         if [[ "$last_event" == "$event" && "$last_file" == "$file" && $time_diff -le 5 ]]; then
             echo "skipping duplicate event"
@@ -39,10 +41,10 @@ function sync_gdrive_checkpoints() {
         last_ts="$timestamp"
         case $event in
             CLOSE_WRITE*)
-                if [[ $file == "G_latest.pth" || $file == "D_latest.pth" || $file == "in_train_manifest.json" || $file == "config.json" ]]; then
+                if [[ $file =~ ^(G|D)(\^|_)?latest\.pth$ || $file == "in_train_manifest.json" || $file == "config.json" ]]; then
                     source_file="$vits_build/$file"
                     destination_dir="$vits_sync_build"
-                    if [[ $file == "G_latest.pth" || $file == "D_latest.pth" ]]; then
+                    if [[ $file =~ ^(G|D)(\^|_)?latest\.pth$ ]]; then
                         if [[ -f "$destination_dir/$file" ]]; then
                             previous_file="${file/latest/previous}"
                             mv "$destination_dir/$file" "$destination_dir/$previous_file"

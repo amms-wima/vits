@@ -34,7 +34,7 @@ from tqdm import tqdm
 
 torch.backends.cudnn.benchmark = True
 global_step = 0
-
+best_losses = None
 
 def main():
   """Assume Single Node Multi GPUs Training Only"""
@@ -45,11 +45,14 @@ def main():
   os.environ['MASTER_PORT'] = '8000'
 
   hps = utils.get_hparams()
+  utils.reload_in_train_manifest(hps)
+
   mp.spawn(run, nprocs=n_gpus, args=(n_gpus, hps,))
 
 
 def run(rank, n_gpus, hps):
   global global_step
+  global best_losses
   if rank == 0:
     logger = utils.get_logger(hps.model_dir)
     logger.info(hps)
@@ -103,25 +106,23 @@ def run(rank, n_gpus, hps):
   epoch_str = 1
   global_step = 0
   try:
-    g_chkPointSrc = os.path.join(hps.model_dir, "G_latest.pth")
-    d_chkPointSrc = os.path.join(hps.model_dir, "D_latest.pth")
-    _, _, _, epoch_str, global_step = utils.load_checkpoint(g_chkPointSrc, net_g, optim_g if hps.load_optimisation else None) 
-    logger.info(f"Checkpoint epoch, step: G[{epoch_str}, {global_step}]")
+    _, _, _, epoch_str, global_step, best_losses = utils.load_checkpoint(hps.restore_gen_file, net_g, optim_g if hps.load_optimisation else None) 
+    hps.in_train_manifest["best_model"]["losses"] = best_losses
     gen_loaded = True
-    _, _, _, epoch_strD, gsD = utils.load_checkpoint(d_chkPointSrc, net_d, optim_d if hps.load_optimisation else None)
-    logger.info(f"Checkpoint epoch, step: D[{epoch_strD}, {gsD}]")
+    _, _, _, epoch_strD, gsD, _ = utils.load_checkpoint(hps.restore_dis_file, net_d, optim_d if hps.load_optimisation else None)
     dis_loaded = True
   except:
-    logger.warn(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}", sys.exc_info())
+    logger.warning(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}", sys.exc_info())
+  logger.info(f"Starting with best_losses: {best_losses}")
   if (hps.start_global_step > -1):
     global_step = hps.start_global_step
     logger.info(f"Resetting global step start: {global_step}")
   hps.in_train_manifest["global_step_start"] = global_step
   if (epoch_str == 0):
     epoch_str = 1
-  _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d)
+  _freeze_layers_if_requested(hps, logger, net_g, net_d)
 
-  last_epoch_for_schlr = -1 if (hps.reset_learning_rate_optimiser_epoch) else epoch_str-2 
+  last_epoch_for_schlr = -1 if (hps.reset_learning_rate_optimiser_epoch or epoch_str == 1) else epoch_str 
   logger.info(f"Using optim.lr_scheduler.ExponentialLR(last_epoch={last_epoch_for_schlr})")
   scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
   scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=hps.train.lr_decay, last_epoch=last_epoch_for_schlr)
@@ -170,7 +171,7 @@ def create_weighted_sampler(hps, dataset):
     return sampler
 
 
-def _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d):
+def _freeze_layers_if_requested(hps, logger, net_g, net_d):
     if (hps.freeze_layers):
     # freeze all other layers except speaker embedding
       param_lst = []
@@ -187,6 +188,7 @@ def _freeze_layers_if_fine_tuning(hps, logger, net_g, net_d):
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
   global global_step
+  global best_losses
   net_g, net_d = nets
   optim_g, optim_d = optims
   scheduler_g, scheduler_d = schedulers
@@ -263,6 +265,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
       if global_step % hps.train.log_interval == 0:
         lr = optim_g.param_groups[0]['lr']
         losses = [loss_disc, loss_gen, loss_fm, loss_mel, loss_dur, loss_kl]
+        best_losses = utils.save_if_best_model(losses, best_losses, epoch, hps, net_g, net_d, optim_g, optim_d, global_step)
         logger.info('Train Epoch: {} [{:.0f}%]'.format(
           epoch,
           100. * batch_idx / len(train_loader)))
@@ -286,30 +289,22 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
           images=image_dict,
           scalars=scalar_dict)
 
-      utils.adjust_training_via_in_train_manifest_edits(hps)
+      utils.reload_in_train_manifest(hps)
       already_saved = False
       if global_step % hps.train.eval_interval == 0:
         evaluate(hps, net_g, eval_loader, writer_eval)
         if (global_step > hps.in_train_manifest["global_step_start"]):
-          _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d)
+          utils.save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d, global_step, False)
           already_saved = True
       if (hps.in_train_manifest["abort_on_next_iteration"] == True):
           if (not already_saved):
-            _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d)
+            utils.save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d, global_step, False)
           exit()
 
     global_step += 1
   
   if rank == 0:
     logger.info('====> Epoch: {}'.format(epoch))
-
-
-def _save_checkpoints(epoch, hps, net_g, net_d, optim_g, optim_d):
-    global global_step
-    utils.save_in_train_manifest(hps, epoch, global_step, False)
-    utils.save_checkpoint(net_g, optim_g, hps.train.learning_rate, epoch, "G_latest.pth", global_step, hps)
-    utils.save_checkpoint(net_d, optim_d, hps.train.learning_rate, epoch, "D_latest.pth", global_step, hps)
-    utils.save_in_train_manifest(hps, epoch, global_step, True)
 
  
 def evaluate(hps, generator, eval_loader, writer_eval):
