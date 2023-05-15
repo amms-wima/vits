@@ -138,6 +138,8 @@ def save_if_best_model(curr_losses, best_losses, epoch, hps, net_g, net_d, optim
     curr_summed_losses = sum(curr_losses).item()
   if (best_losses is not None):
     best_summed_losses = sum(best_losses).item()
+  if best_losses is None or curr_summed_losses < best_summed_losses:
+    reload_in_train_manifest(hps)
   hps.in_train_manifest["summed_losses"] = curr_summed_losses
   if best_losses is None or curr_summed_losses < best_summed_losses:
     best_losses = curr_losses
@@ -394,6 +396,7 @@ def save_in_train_manifest(hps, iteration, glb_step, after_save=True):
     try:
       with open(hps.in_train_manifest_path, "w") as f:
         json.dump(hps.in_train_manifest, f, indent=2)
+      logger.info(f"best_model: {hps.in_train_manifest['best_model']}")
     finally:
       hps.in_train_manifest["best_model"]["losses"] = best_losses
     if (hps.model_sync_folder is not None):

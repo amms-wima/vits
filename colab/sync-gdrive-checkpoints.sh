@@ -37,7 +37,7 @@ function sync_gdrive_checkpoints() {
         if [ "${VITS_DEBUG}" = "1" ]; then
             echo "$hms", "$event", "$file", " [$curr_tm - $last_tm = $diff_tm]"
         fi
-        if [[ "$last_event" == "$event" && "$last_file" == "$file" && $diff_tm -le 3 ]]; then
+        if [[ "$last_event" == "$event" && "$last_file" == "$file" && "$file" == *.pth && $diff_tm -le 3 ]]; then
             echo "$hms | $file diff=$diff_tm skipping duplicate event.."
             continue
         fi
