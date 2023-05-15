@@ -83,6 +83,7 @@ def _load_dict_key_values(model, saved_state_dict, state_dict):
 
 
 def _load_optimizer(optimizer, checkpoint_dict, idx_diff_dict):
+  opt_loaded = False
   if optimizer is not None:
     try:
       saved_state_dict = checkpoint_dict['optimizer']

@@ -22,7 +22,7 @@ function install_vits_project() {
     echo "  cloning git repo"
     git clone https://github.com/amms-wima/vits.git
     cd vits
-    git checkout alt-main
+    git checkout feat_save_best_model
     
     echo "  build monotonic_align"
     cd monotonic_align  

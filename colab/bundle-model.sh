@@ -17,7 +17,7 @@ function bundle_model_on_after_save() {
   
         if [[ "$after_save" == "true" ]]; then
             pushd "$vits_sync_build" || exit 1
-            (tar czvf "av-$latest_step.tar.gz" ?_latest.pth config.json in_train_manifest.json &)
+            (tar czvf "av-$latest_step.tar.gz" ??latest.pth config.json in_train_manifest.json &)
             popd || exit 1
         fi
     fi
