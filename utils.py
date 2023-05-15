@@ -20,25 +20,15 @@ logger = logging
 def query_checkpoint(checkpoint_path):
   assert os.path.isfile(checkpoint_path)
   checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
-  iteration = checkpoint_dict['iteration']
-  learning_rate = checkpoint_dict['learning_rate']
-  try:
-    checkpoint_dict['optimizer']
-    has_opt = True
-  except:
-    has_opt = False
-  try:
-    best_losses = checkpoint_dict['best_losses']
-    bl_loaded = True
-  except:
-    best_losses = None
-  try:
-    gbl_step = checkpoint_dict['gbl_step']
-  except:
-    gbl_step = 0
-  logger.info(f"Loaded '{checkpoint_path}' ({gbl_step}/{iteration}) [opt:{has_opt}, bl:{bl_loaded}]")
-  if (bl_loaded):
-    logger.info(f"\tlr: {best_losses}")
+  iteration, _ = _load_checkpoint_dict_entry(checkpoint_dict, 'iteration', raise_if_not_found=True)
+  learning_rate, _ = _load_checkpoint_dict_entry(checkpoint_dict, 'learning_rate', raise_if_not_found=True)
+  _, has_opt = _load_checkpoint_dict_entry(checkpoint_dict, 'optimizer', raise_if_not_found=False)
+  best_losses, has_bl = _load_checkpoint_dict_entry(checkpoint_dict, 'best_losses', None, raise_if_not_found=False)
+  gbl_step,_ = _load_checkpoint_dict_entry(checkpoint_dict, 'gbl_step', 0, raise_if_not_found=False)
+  logger.info(f"Loaded '{checkpoint_path}' ({gbl_step}/{iteration}) [opt:{has_opt}, bl:{has_bl}]")
+  if (has_bl):
+    logger.info(f"\tbl: {best_losses}")
+    logger.info(f"\tbl_sum: {sum(best_losses).item()}")
   logger.info(f"\tlr: {learning_rate}")
   saved_state_dict = checkpoint_dict['model']
   if "enc_p.emb.weight" in saved_state_dict:
@@ -144,12 +134,13 @@ def save_if_best_model(curr_losses, best_losses, epoch, hps, net_g, net_d, optim
   curr_summed_losses = -1
   best_summed_losses = -1
   if (curr_losses is not None):
-    curr_summed_losses = sum(curr_losses)
+    curr_summed_losses = sum(curr_losses).item()
   if (best_losses is not None):
-    best_summed_losses = sum(best_losses)
+    best_summed_losses = sum(best_losses).item()
   hps.in_train_manifest["summed_losses"] = curr_summed_losses
   if best_losses is None or curr_summed_losses < best_summed_losses:
     best_losses = curr_losses
+    best_summed_losses = curr_summed_losses
     hps.in_train_manifest["best_model"]["iteration"] = epoch
     hps.in_train_manifest["best_model"]["step"] = gbl_step
     hps.in_train_manifest["best_model"]["summed_losses"] = best_summed_losses

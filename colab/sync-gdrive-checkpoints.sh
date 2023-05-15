@@ -15,7 +15,11 @@ function sync_gdrive_checkpoints() {
     local destination_dir=""
     local last_event=""
     local last_file=""
-    local last_ts=""
+    local timestamp=""
+    local l_timestamp=""
+    local last_tm=""
+    local curr_tm=""
+    local diff_tm=-1
 
     if [ "${VITS_DEBUG}" = "1" ]; then
         echo "sync_gdrive_checkpoints $vits_build -> $vits_sync_build"
@@ -24,24 +28,28 @@ function sync_gdrive_checkpoints() {
     mkdir -p "$vits_sync_build"
 
     inotifywait -e close_write -q --timefmt '%Y-%m-%d %H:%M:%S' --format '%T %e %f' -m "$vits_build" |
-    while read -r timestamp event file
+    while read -r ymd hms event file
     do
+        timestamp="$ymd $hms"
+        curr_tm=$(date -d "$(date -d "$timestamp" +%T)" +%s)
+        last_tm=$(date -d "$(date -d "$l_timestamp" +%T)" +%s)
+        diff_tm=$((curr_tm - last_tm))
         if [ "${VITS_DEBUG}" = "1" ]; then
-            echo "$event", "$file", "$timestamp"
+            echo "$hms", "$event", "$file", " [$curr_tm - $last_tm = $diff_tm]"
         fi
-        current_ts=$(date -d "$(date -d "$timestamp" +%T)" +%s)
-        last_ts=$(date -d "$(date -d "$last_ts" +%T)" +%s)
-        time_diff=$((current_ts - last_ts))
-        if [[ "$last_event" == "$event" && "$last_file" == "$file" && $time_diff -le 5 ]]; then
-            echo "skipping duplicate event"
+        if [[ "$last_event" == "$event" && "$last_file" == "$file" && $diff_tm -le 3 ]]; then
+            echo "$hms | $file diff=$diff_tm skipping duplicate event.."
             continue
         fi
         last_event="$event"
         last_file="$file"
-        last_ts="$timestamp"
+        l_timestamp="$timestamp"
         case $event in
             CLOSE_WRITE*)
                 if [[ $file =~ ^(G|D)(\^|_)?latest\.pth$ || $file == "in_train_manifest.json" || $file == "config.json" ]]; then
+                    if [ "${VITS_DEBUG}" = "1" ]; then
+                        echo "  processing: $file"
+                    fi
                     source_file="$vits_build/$file"
                     destination_dir="$vits_sync_build"
                     if [[ $file =~ ^(G|D)(\^|_)?latest\.pth$ ]]; then
@@ -52,7 +60,7 @@ function sync_gdrive_checkpoints() {
                         sleep "$wait_dur"  # Add a delay after each file write for large files
                     fi
                     cp "$source_file" "$destination_dir/$file"
-                    echo "File copied: $source_file -> $destination_dir/$file"
+                    echo "$hms File copied: $source_file -> $destination_dir/$file"
                 fi
                 ;;
         esac
