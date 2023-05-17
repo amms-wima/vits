@@ -87,9 +87,12 @@ def _load_optimizer(optimizer, checkpoint_dict, idx_diff_dict):
   if optimizer is not None:
     try:
       saved_state_dict = checkpoint_dict['optimizer']
-      _realign_optimizer_tensor_size_where_reqd(saved_state_dict, idx_diff_dict)
-      optimizer.load_state_dict(saved_state_dict)
-      opt_loaded = True
+      if (saved_state_dict is not None):
+        _realign_optimizer_tensor_size_where_reqd(saved_state_dict, idx_diff_dict)
+        optimizer.load_state_dict(saved_state_dict)
+        opt_loaded = True
+      else:
+        logger.warning("Optimizer was removed from checkpoint dictionary")
     except:
       logger.warning("optimizer was not loaded from checkpoint dictionary", sys.exc_info())
   return opt_loaded
@@ -110,6 +113,8 @@ def _realign_weight_tensor_size_where_reqd(saved_state_dict, state_dict):
 
 
 def _realign_optimizer_tensor_size_where_reqd(saved_state_dict, idx_diff_dict):
+  if (saved_state_dict is None):
+    return
   for key, diff_rows in idx_diff_dict.items():
     if 'exp_avg' in saved_state_dict['state'][key]:
       saved_exp_avg = saved_state_dict['state'][key]['exp_avg']
@@ -282,8 +287,12 @@ def get_hparams(init=True):
                       help='restore generator model file to continue training')
   parser.add_argument('-rd', '--restore_dis_file', type=str, default=None,
                       help='restore discriminator model file to continue training')
-  parser.add_argument('-fl', '--freeze_layers', type=int, default=0, 
-                      help='set layers to be frozen when fine-tuning')
+  parser.add_argument('-fgl', '--freeze_generator_layers', type=int, default=0, 
+                      help='include generator model when freezing non-speaker layers')
+  parser.add_argument('-fdl', '--freeze_discriminator_layers', type=int, default=0, 
+                      help='include discriminator model when freezing non-speaker layers')
+  parser.add_argument('-usids', '--unfreeze_speaker_ids', nargs='+', type=int, default=[],
+                      help='List of speaker IDs to not freeze during fine-tuning')
   parser.add_argument('-lo', '--load_optimisation', type=int, default=1, 
                       help='loads the optimisation in utils.load_checkpoint()')
   parser.add_argument('-rlroe', '--reset_learning_rate_optimiser_epoch', type=int, default=0, 
@@ -300,9 +309,15 @@ def get_hparams(init=True):
   hparams.model_dir = output_path
   if (args.restore_gen_file is None): 
     hparams.restore_gen_file = os.path.join(hparams.model_dir, "G^latest.pth")
+  else:
+    hparams.restore_gen_file = args.restore_gen_file
   if (args.restore_dis_file is None): 
     hparams.restore_dis_file = os.path.join(hparams.model_dir, "D^latest.pth")
-  hparams.freeze_layers = args.freeze_layers == 1
+  else:
+    hparams.restore_dis_file = args.restore_dis_file
+  hparams.freeze_generator_layers = args.freeze_generator_layers == 1
+  hparams.freeze_discriminator_layers = args.freeze_discriminator_layers == 1
+  hparams.unfreeze_speaker_ids = args.unfreeze_speaker_ids
   hparams.load_optimisation = args.load_optimisation == 1
   hparams.reset_learning_rate_optimiser_epoch = args.reset_learning_rate_optimiser_epoch == 1
   hparams.start_global_step = args.start_global_step

@@ -115,11 +115,11 @@ def run(rank, n_gpus, hps):
       betas=hps.train.betas, 
       eps=hps.train.eps)
   if torch.cuda.is_available():
-    net_g = DDP(net_g, device_ids=[rank])
-    net_d = DDP(net_d, device_ids=[rank])
+    net_g = DDP(net_g, device_ids=[rank]) # , find_unused_parameters=True
+    net_d = DDP(net_d, device_ids=[rank]) 
   else:
-    net_g = DDP(net_g, device_ids=None, output_device=None)
-    net_d = DDP(net_d, device_ids=None, output_device=None)
+    net_g = DDP(net_g, device_ids=None, output_device=None, find_unused_parameters=True) # , find_unused_parameters=True
+    net_d = DDP(net_d, device_ids=None, output_device=None, find_unused_parameters=True)
 
   gen_loaded = False
   dis_loaded = False
@@ -192,18 +192,34 @@ def create_weighted_sampler(hps, dataset):
 
 
 def _freeze_layers_if_requested(hps, logger, net_g, net_d):
-    if (hps.freeze_layers):
-    # freeze all other layers except speaker embedding
-      param_lst = []
-      for name, param in net_g.named_parameters():
-          param.requires_grad = True
-          param_lst.append(name)
-      logger.debug(f"freezing net_g layers: {param_lst}")
-      param_lst = []
-      for name, param in net_d.named_parameters():
-          param.requires_grad = True
-          param_lst.append(name)
-      logger.debug(f"freezing net_d layers: {param_lst}")
+  if (hps.freeze_generator_layers):
+    _freeze_layers_in_model(hps, logger, net_g, 'net_g')
+
+  if (hps.freeze_discriminator_layers):
+    _freeze_layers_in_model(hps, logger, net_d, 'net_d')
+
+
+def _freeze_layers_in_model(hps, logger, model, label):
+    _model = model.module if hasattr(model, 'module') else model
+    for param in _model.parameters():
+        param.requires_grad = False
+    logger.warning(f"{label}.parameters().requires_grad = False | All layers have been frozen")
+
+    _model.emb_g.weight.requires_grad = True
+    logger.warning(f"{label}.emb_g.weight.requires_grad = True | Speaker layer has been UNFROZEN")
+
+    # new_weight = _model.emb_g.weight.detach().clone()
+    # speaker_mask = torch.zeros_like(new_weight, dtype=torch.bool)
+    # for sid in range(hps.data.n_speakers):
+    #     req_grad = True if (sid in hps.unfreeze_speaker_ids) else False
+    #     speaker_mask[sid] = req_grad
+    #     logger.warning(f"set {label}.emb_g.weight-sid[{sid}].requires_grad = {req_grad}")
+    # new_weight = torch.where(speaker_mask, torch.tensor(1.0, device=new_weight.device), new_weight)
+    # _model.emb_g.weight = torch.nn.Parameter(new_weight)
+
+    # for sid in range(hps.data.n_speakers):
+    #   logger.warning(f"chk {label}.emb_g.weight-sid[{sid}].requires_grad = {_model.emb_g.weight[sid].requires_grad}")
+    # logger.warning("Check whether it persisted!")
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
@@ -283,13 +299,14 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
 
     if rank==0:
       losses = [loss_disc, loss_gen, loss_fm, loss_mel, loss_dur, loss_kl]
+      sum_loss = sum(losses)  # Calculate the sum of losses
       best_losses = utils.save_if_best_model(losses, best_losses, epoch, hps, net_g, net_d, optim_g, optim_d, global_step)
       if global_step % hps.train.log_interval == 0:
         lr = optim_g.param_groups[0]['lr']
         logger.info('Train Epoch: {} [{:.0f}%]'.format(
           epoch,
           100. * batch_idx / len(train_loader)))
-        logger.info(f"{global_step}> lr: {round(lr, 5)}, sum: {round(sum(losses).item(), 5)} = {[round(x.item(), 5) for x in losses]}")
+        logger.info(f"{global_step}> lr: {round(lr, 5)}, sum: {round(sum_loss.item(), 5)} = {[round(x.item(), 5) for x in losses]}")
         
         scalar_dict = {"loss/g/total": loss_gen_all, "loss/d/total": loss_disc_all, "learning_rate": lr, "grad_norm_d": grad_norm_d, "grad_norm_g": grad_norm_g}
         scalar_dict.update({"loss/g/fm": loss_fm, "loss/g/mel": loss_mel, "loss/g/dur": loss_dur, "loss/g/kl": loss_kl})
@@ -308,6 +325,7 @@ def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loade
           global_step=global_step, 
           images=image_dict,
           scalars=scalar_dict)
+        writer.add_scalar("loss/sum", sum_loss.item(), global_step=global_step)
 
       if global_step % hps.train.eval_interval == 0:
         utils.reload_in_train_manifest(hps)
