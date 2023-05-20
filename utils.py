@@ -93,8 +93,9 @@ def _load_optimizer(optimizer, checkpoint_dict, idx_diff_dict):
         opt_loaded = True
       else:
         logger.warning("Optimizer was removed from checkpoint dictionary")
-    except:
-      logger.warning("optimizer was not loaded from checkpoint dictionary", sys.exc_info())
+    except Exception as e:
+      error_message = str(e)
+      logger.warning(f"optimizer was not loaded from checkpoint dictionary; Err: {error_message}")
   return opt_loaded
 
 
@@ -291,8 +292,8 @@ def get_hparams(init=True):
                       help='include generator model when freezing non-speaker layers')
   parser.add_argument('-fdl', '--freeze_discriminator_layers', type=int, default=0, 
                       help='include discriminator model when freezing non-speaker layers')
-  parser.add_argument('-usids', '--unfreeze_speaker_ids', nargs='+', type=int, default=[],
-                      help='List of speaker IDs to not freeze during fine-tuning')
+  parser.add_argument('-ksids', '--key_speaker_ids', nargs='+', type=int, default=[],
+                      help='List of key speaker IDs to process with')
   parser.add_argument('-lo', '--load_optimisation', type=int, default=1, 
                       help='loads the optimisation in utils.load_checkpoint()')
   parser.add_argument('-rlroe', '--reset_learning_rate_optimiser_epoch', type=int, default=0, 
@@ -317,7 +318,7 @@ def get_hparams(init=True):
     hparams.restore_dis_file = args.restore_dis_file
   hparams.freeze_generator_layers = args.freeze_generator_layers == 1
   hparams.freeze_discriminator_layers = args.freeze_discriminator_layers == 1
-  hparams.unfreeze_speaker_ids = args.unfreeze_speaker_ids
+  hparams.key_speaker_ids = args.key_speaker_ids
   hparams.load_optimisation = args.load_optimisation == 1
   hparams.reset_learning_rate_optimiser_epoch = args.reset_learning_rate_optimiser_epoch == 1
   hparams.start_global_step = args.start_global_step

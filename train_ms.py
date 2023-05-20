@@ -111,8 +111,10 @@ def run(rank, n_gpus, hps):
     gen_loaded = True
     _, _, _, epoch_strD, gsD, _ = utils.load_checkpoint(hps.restore_dis_file, net_d, optim_d if hps.load_optimisation else None)
     dis_loaded = True
-  except:
-    logger.warning(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}", sys.exc_info())
+  except Exception as e:
+    error_message = str(e)
+    error_message = error_message if error_message != "" else str(type(e))
+    logger.warning(f"Gen loaded: {gen_loaded}, Disc: loaded: {dis_loaded}; Err: {error_message}")
   logger.info(f"Starting with best_losses: {best_losses}")
   if (hps.start_global_step > -1):
     global_step = hps.start_global_step
@@ -185,21 +187,10 @@ def _freeze_layers_in_model(hps, logger, model, label):
         param.requires_grad = False
     logger.warning(f"{label}.parameters().requires_grad = False | All layers have been frozen")
 
-    _model.emb_g.weight.requires_grad = True
-    logger.warning(f"{label}.emb_g.weight.requires_grad = True | Speaker layer has been UNFROZEN")
-
-    # new_weight = _model.emb_g.weight.detach().clone()
-    # speaker_mask = torch.zeros_like(new_weight, dtype=torch.bool)
-    # for sid in range(hps.data.n_speakers):
-    #     req_grad = True if (sid in hps.unfreeze_speaker_ids) else False
-    #     speaker_mask[sid] = req_grad
-    #     logger.warning(f"set {label}.emb_g.weight-sid[{sid}].requires_grad = {req_grad}")
-    # new_weight = torch.where(speaker_mask, torch.tensor(1.0, device=new_weight.device), new_weight)
-    # _model.emb_g.weight = torch.nn.Parameter(new_weight)
-
-    # for sid in range(hps.data.n_speakers):
-    #   logger.warning(f"chk {label}.emb_g.weight-sid[{sid}].requires_grad = {_model.emb_g.weight[sid].requires_grad}")
-    # logger.warning("Check whether it persisted!")
+    if (hasattr(_model, "emb_g")):
+      if (hasattr(_model.emb_g, "weight")):
+        _model.emb_g.weight.requires_grad = True
+        logger.warning(f"{label}.emb_g.weight.requires_grad = {_model.emb_g.weight.requires_grad} | Speaker layer should been (True) UNFROZEN")
 
 
 def train_and_evaluate(rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers):
@@ -368,9 +359,9 @@ def evaluate(hps, generator, eval_loader, writer_eval):
       "gen/mel": utils.plot_spectrogram_to_numpy(y_hat_mel[0].cpu().numpy())
     }
     audio_dict = {
-      "gen/audio": y_hat[0,:,:y_hat_lengths[0]]
+      f"gen/audio_{global_step}": y_hat[0,:,:y_hat_lengths[0]]
     }
-    if global_step == 0:
+    if global_step == 0 or global_step == hps.in_train_manifest["global_step_start"]:
       image_dict.update({"gt/mel": utils.plot_spectrogram_to_numpy(mel[0].cpu().numpy())})
       audio_dict.update({"gt/audio": y[0,:,:y_lengths[0]]})
 

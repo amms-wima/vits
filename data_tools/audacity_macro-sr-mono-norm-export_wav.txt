@@ -1,0 +1,4 @@
+SetProject:Rate="22050"
+Stereo to Mono:
+LoudnessNormalization:DualMono="1" LUFSLevel="-23" NormalizeTo="0" RMSLevel="-20" StereoIndependent="0"
+ExportWav:
