@@ -68,22 +68,32 @@ def replace_symbols(text, lang="en"):
     return text
 
 
+def _pad_subsection_if_previously(orig_subsection, ipa_ver):
+    if (orig_subsection.startswith(' ')):
+        ipa_ver = ' ' + ipa_ver
+    if (orig_subsection.endswith(' ')):
+        ipa_ver = ipa_ver + ' '
+    return ipa_ver
+
+
 def en_pi_si_phonemize(text):
     ret = ''
     sections = re.split(r'[@]', text)
     pali_subsections = re.findall(r'@([^@]+)@', text)
     for i, subsection in enumerate(sections):
+        ipa = ''
         if (subsection == ''):
             continue
         if (subsection in pali_subsections):
-            ret += pali_to_ipa(subsection)
+            ipa += pali_to_ipa(subsection)
         else:
             trimmed_text = subsection.strip()
             if (trimmed_text in [',', '.']):
-              ret += subsection
+              ipa += subsection
             else:
               en_phonemization = phonemize(trimmed_text, language='en-us', backend='espeak', strip=True, preserve_punctuation=True, with_stress=True)
-              ret += en_phonemization
+              ipa += en_phonemization
+        ret += _pad_subsection_if_previously(subsection, ipa)
     return ret
     
 
@@ -98,4 +108,5 @@ def en_training_clean_and_phonemize(text):
     text = remove_aux_symbols(text)
     text = collapse_whitespace(text)
     text = en_pi_si_phonemize(text)
+    text = collapse_whitespace(text)
     return text

@@ -1,4 +1,6 @@
 SPECIAL_MAPPING = {
+    "'s": "z",
+    "’s": "z",
     "bh": "bˈ",
     "ch": "tʃˈ",
     "ḍh": "d",
