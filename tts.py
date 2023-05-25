@@ -3,19 +3,29 @@ import utils
 from models import SynthesizerTrn
 import torch
 from torch import no_grad, LongTensor
-from text import text_to_sequence
+from text import text_to_sequence, cleaned_text_to_sequence
 import commons
 import scipy.io.wavfile as wavf
 import argparse
 import re
 import numpy as np
 
-import pysbd
-from text.symbols import symbols
+import io
 import os
+import sys
+import logging
+
 import glob
 import fnmatch
 from tqdm import tqdm
+
+import pysbd
+from text.symbols import symbols
+
+
+logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
+logger = logging.getLogger()
+
 
 class TextToSpeech():
     _DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -37,14 +47,16 @@ class TextToSpeech():
 
     def synthesize(self, text, concat_audio=None):
         text_segments = TextToSpeech._split_into_segments(text) 
+        ipa_text = ""
         for i, text_seg in enumerate(text_segments):
             cleaned_seg = TextToSpeech._clean_segment(text_seg.strip())
-            seg_audio = self._synthesize_segment(cleaned_seg)
+            seg_audio, ipa_seg = self._synthesize_segment(cleaned_seg)
             pause_dur = TextToSpeech._query_pause_duration(text_seg[-1])
-            if (TextToSpeech._CLI_CFG["verbose"]):
-                print(f"{text_seg} [pause: {pause_dur}]")
+            if (TextToSpeech._CLI_CFG.verbose):
+                logger.debug(f"{text_seg} [pause: {pause_dur}]")
             concat_audio = TextToSpeech._concat_audio_segment(concat_audio, seg_audio, pause_dur)
-        return concat_audio
+            ipa_text += ("" if i == 0 else "\n") + ipa_seg
+        return concat_audio, ipa_text
 
 
     @staticmethod
@@ -57,10 +69,10 @@ class TextToSpeech():
         
         if (TextToSpeech._SEGMENTER is None):
             TextToSpeech._prepare_segmenter()
-        if (TextToSpeech._NET_G is None):
+        if (TextToSpeech._NET_G is None and not TextToSpeech._CLI_CFG.no_infer):
             TextToSpeech._prepare_model()
 
-        TextToSpeech._SID = LongTensor([TextToSpeech._CLI_CFG["sid"]]).to(TextToSpeech._DEVICE)
+        TextToSpeech._SID = LongTensor([TextToSpeech._CLI_CFG.sid]).to(TextToSpeech._DEVICE)
 
 
     @staticmethod
@@ -76,27 +88,39 @@ class TextToSpeech():
             os.remove(path)
 
 
+    @staticmethod
+    def save_ipa_file(text: str, path: str):
+        path = os.path.splitext(path)[0] + ".ipa"
+        with open(path, "w") as f:
+            f.write(text)
+
+
     def _text_to_tensor(self, text):
-        text_norm = text_to_sequence(text, TextToSpeech._HPS.data.text_cleaners)
+        if (TextToSpeech._CLI_CFG.read_as_ipa):
+            ipa_seg = text
+            text_norm = cleaned_text_to_sequence(text)
+        else:
+            text_norm, ipa_seg = text_to_sequence(text, TextToSpeech._HPS.data.text_cleaners)
         if (TextToSpeech._HPS.data.add_blank):
             text_norm = commons.intersperse(text_norm, 0)
         text_norm = LongTensor(text_norm)
-        return text_norm
+        return text_norm, ipa_seg
 
-
+    
     def _synthesize_segment(self, text):
         audio = None
-        stn_tst = self._text_to_tensor(text)
-        with no_grad():
-            x_tst = stn_tst.unsqueeze(0).to(TextToSpeech._DEVICE)
-            x_tst_lengths = LongTensor([stn_tst.size(0)]).to(TextToSpeech._DEVICE)
-            audio = TextToSpeech._NET_G.infer(x_tst, x_tst_lengths, sid=TextToSpeech._SID, 
-                    noise_scale=TextToSpeech._CLI_CFG["noise_scale"], 
-                    noise_scale_w=TextToSpeech._CLI_CFG["noise_scale_w"],
-                    length_scale=1.0 / TextToSpeech._CLI_CFG["length_scale"]
-                )[0][0, 0].data.cpu().float().numpy()
-        del stn_tst, x_tst, x_tst_lengths
-        return audio
+        stn_tst, ipa_seg = self._text_to_tensor(text)
+        if (not TextToSpeech._CLI_CFG.no_infer):
+            with no_grad():
+                x_tst = stn_tst.unsqueeze(0).to(TextToSpeech._DEVICE)
+                x_tst_lengths = LongTensor([stn_tst.size(0)]).to(TextToSpeech._DEVICE)
+                audio = TextToSpeech._NET_G.infer(x_tst, x_tst_lengths, sid=TextToSpeech._SID, 
+                        noise_scale=TextToSpeech._CLI_CFG.noise_scale, 
+                        noise_scale_w=TextToSpeech._CLI_CFG.noise_scale_w,
+                        length_scale=1.0 / TextToSpeech._CLI_CFG.length_scale
+                    )[0][0, 0].data.cpu().float().numpy()
+            del stn_tst, x_tst, x_tst_lengths
+        return audio, ipa_seg
 
 
     @staticmethod
@@ -116,7 +140,7 @@ class TextToSpeech():
                 **TextToSpeech._HPS.model
             ).to(TextToSpeech._DEVICE)
         _ = TextToSpeech._NET_G.eval()
-        _ = utils.load_checkpoint(TextToSpeech._CLI_CFG["model_path"], TextToSpeech._NET_G, None)
+        _ = utils.load_checkpoint(TextToSpeech._CLI_CFG.model_path, TextToSpeech._NET_G, None)
 
 
     @staticmethod
@@ -152,6 +176,8 @@ class TextToSpeech():
 
     @staticmethod
     def _concat_audio_segment(concat_audio, seg_audio, pause_duration):
+        if (TextToSpeech._CLI_CFG.no_infer):
+            return concat_audio
         pause_samples = int(pause_duration * TextToSpeech._HPS.data.sampling_rate)
         pause_audio = np.zeros(pause_samples)
         if concat_audio is None:
@@ -161,31 +187,61 @@ class TextToSpeech():
         return concat_audio
 
 
-class TextFileToSpeech():
-    src_file: str = None
-    output_file: str = None
+class AbstractSourceTextToSpeech():
     tts_synthesizer: TextToSpeech = None
+    output_file: str = None
 
-    def __init__(self, src_file, output_file):
-        self.src_file = src_file
+    def __init__(self, output_file):
         self.output_file = output_file
         self.tts_synthesizer = TextToSpeech()
 
 
     def synthesize(self):
         file_audio = None
-        with open(self.src_file, 'r') as f:
-            for i, text in enumerate(tqdm(f)):
+        ipa_text = ""
+        with self._open_src_stream_as_iterable() as itr:
+            for i, text in enumerate(tqdm(itr)):
                 text = text.strip()
                 if (text == ''):
                     continue
-                file_audio = self.tts_synthesizer.synthesize(text, file_audio)
-        save_as_mp3 = TextToSpeech._CLI_CFG["save_as_mp3"]
-        if (TextToSpeech._CLI_CFG["prepend_sid_in_filename"]):
+                file_audio, ipa_line = self.tts_synthesizer.synthesize(text, file_audio)
+                ipa_text += ("" if i == 0 else "\n") + ipa_line
+        mp3 = TextToSpeech._CLI_CFG.mp3
+        if (TextToSpeech._CLI_CFG.prepend_sid_in_filename):
             dir, fn  = os.path.split(self.output_file)
-            sid = TextToSpeech._CLI_CFG["sid"]
+            sid = TextToSpeech._CLI_CFG.sid
             self.output_file = os.path.join(dir, f"s{sid}-{fn}")
-        TextToSpeech.save_audio_file(file_audio, self.output_file, save_as_mp3)
+        if (TextToSpeech._CLI_CFG.save_ipa_file):
+            TextToSpeech.save_ipa_file(ipa_text, self.output_file)
+        if (not TextToSpeech._CLI_CFG.test):
+            TextToSpeech.save_audio_file(file_audio, self.output_file, mp3)
+
+
+    def _open_src_stream_as_iterable(self): 
+        pass
+
+
+class TextFileToSpeech(AbstractSourceTextToSpeech):
+    src_file: str = None
+
+    def __init__(self, src_file, output_file):
+        super().__init__(output_file)
+        self.src_file = src_file
+
+
+    def _open_src_stream_as_iterable(self): 
+        return open(self.src_file, 'r')
+
+
+class StandardInputToSpeech(AbstractSourceTextToSpeech):
+    def __init__(self, output_file):
+        super().__init__(output_file)
+
+
+    def _open_src_stream_as_iterable(self): 
+        text = sys.stdin.read().strip()
+        ret = io.StringIO(text)
+        return ret
 
 
 class TextDirectoryToSpeech():
@@ -236,40 +292,39 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--root_dir', type=str, help="Source root directory to start file TTS processing.")
     parser.add_argument('-f', '--filter', type=str, default="*.txt", help="Filter to use for text file selections in directories")
     parser.add_argument('-r', '--recurse_dirs', action="store_true", help="Process directories recursively when -d is specified.")
-    parser.add_argument('-o', '--output_name', type=str, required=True, help="Either a save-as filename or a root output directory if -d is specified.")
-    parser.add_argument('-p', '--prepend_sid_in_filename', action="store_true")
-    parser.add_argument('-mp3', '--save_as_mp3', action="store_true")
+    parser.add_argument('-of', '--output_file', type=str, help="Audio save-as filename if -t or stdin is specified.")
+    parser.add_argument('-od', '--output_dir', type=str, help="Root output directory if -d is specified.")
     parser.add_argument('-ns', '--noise_scale', type=float,default=.667)
     parser.add_argument('-nsw', '--noise_scale_w', type=float,default=0.6)
     parser.add_argument('-ls', '--length_scale', type=float,default=1)
-    parser.add_argument('-v', '--verbose', action="store_true")
+    parser.add_argument('--prepend_sid_in_filename', action="store_true")
+    parser.add_argument('--test', action="store_true", help="Test everything except saving audio.")
+    parser.add_argument('--mp3', action="store_true", help="Save as mp3 rather than wav file.")
+    parser.add_argument('--no_infer', action="store_true", help="Dont run the inference; used with --save_ipa_file.")
+    parser.add_argument('--save_ipa_file', action="store_true", help="Save IPA text file to stage processing.")
+    parser.add_argument('--read_as_ipa', action="store_true", help="Process the source as IPA souce and by-pass cleaning & phonemization.")
+    parser.add_argument('--stdin', action="store_true", help="Use standard input instead of file source.")
+    parser.add_argument('--verbose', action="store_true")
     args = parser.parse_args()
 
     app = None
-    if (((args.text_file is None) and (args.root_dir is None)) or ((args.text_file is not None) and (args.root_dir is not None))):
-        raise Exception("Specify either text_file or root_dir but not both")
-    output_name = Path(args.output_name)
-    if (args.text_file is not None):
+    if (((args.text_file is None) and (args.root_dir is None) and (not args.stdin)) or ((args.text_file is not None) and (args.root_dir is not None) and (args.stdin))):
+        raise Exception("Specify only one of either text_file or root_dir, stdin")
+    if (args.output_file is not None):
+        output_name = Path(args.output_file)
         output_name.parent.mkdir(parents=True, exist_ok=True)
-    else:
+    elif (args.output_dir is not None):
+        output_name = Path(args.output_dir)
         output_name.mkdir(parents=True, exist_ok=True)
 
-    config = {
-        "model_path": args.model_path,
-        "config_path": args.config_path,
-        "sid": args.sid,
-        "text_file": args.text_file,
-        "output_name": output_name,
-        "prepend_sid_in_filename": args.prepend_sid_in_filename,
-        "save_as_mp3": args.save_as_mp3,
-        "noise_scale": args.noise_scale,
-        "noise_scale_w": args.noise_scale_w,
-        "length_scale": args.length_scale,
-        "verbose": args.verbose,
-    }
-    TextToSpeech.init(config)
+    TextToSpeech.init(args) 
 
-    if (args.text_file):
+    if (args.verbose):
+        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+
+    if (args.stdin):
+        app = StandardInputToSpeech(output_name)    
+    elif (args.text_file):
         app = TextFileToSpeech(args.text_file, output_name)
     else:
         app = TextDirectoryToSpeech(args.root_dir, args.filter, args.recurse_dirs, output_name)
