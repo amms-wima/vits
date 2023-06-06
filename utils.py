@@ -288,17 +288,17 @@ def get_hparams(init=True):
                       help='restore generator model file to continue training')
   parser.add_argument('-rd', '--restore_dis_file', type=str, default=None,
                       help='restore discriminator model file to continue training')
-  parser.add_argument('-fgl', '--freeze_generator_layers', type=int, default=0, 
+  parser.add_argument('-fgl', '--freeze_generator_layers', action="store_true",  
                       help='include generator model when freezing non-speaker layers')
-  parser.add_argument('-fdl', '--freeze_discriminator_layers', type=int, default=0, 
+  parser.add_argument('-fdl', '--freeze_discriminator_layers', action="store_true",  
                       help='include discriminator model when freezing non-speaker layers')
   parser.add_argument('-ksids', '--key_speaker_ids', nargs='+', type=int, default=[],
                       help='List of key speaker IDs to process with')
-  parser.add_argument('-lo', '--load_optimisation', type=int, default=1, 
+  parser.add_argument('-dlo', '--dont_load_optimisation', action="store_true", 
                       help='loads the optimisation in utils.load_checkpoint()')
-  parser.add_argument('-rlroe', '--reset_learning_rate_optimiser_epoch', type=int, default=0, 
+  parser.add_argument('-rlroe', '--reset_learning_rate_optimiser_epoch', action="store_true", 
                       help='uses -1 for torch.optim.lr_scheduler.ExponentialLR if set')
-  parser.add_argument('-spb', '--save_prev_backup', type=int, default=1, 
+  parser.add_argument('-dspb', '--dont_save_prev_backup', action="store_true", 
                       help='set to 0 only when using an external backup utility otherwise ?_latest.pth will not be saved to ?_previous.pth')
   parser.add_argument('-s', '--start_global_step', type=int, default=-1, help='start global steps count [-1=system determined]')
   parser.add_argument('-msf', '--model_sync_folder', type=str, default=None, help='sync the model files to a sync folder (eg. /content/drive/MyDrive/vits/build)')
@@ -316,14 +316,14 @@ def get_hparams(init=True):
     hparams.restore_dis_file = os.path.join(hparams.model_dir, "D^latest.pth")
   else:
     hparams.restore_dis_file = args.restore_dis_file
-  hparams.freeze_generator_layers = args.freeze_generator_layers == 1
-  hparams.freeze_discriminator_layers = args.freeze_discriminator_layers == 1
+  hparams.freeze_generator_layers = args.freeze_generator_layers
+  hparams.freeze_discriminator_layers = args.freeze_discriminator_layers
   hparams.key_speaker_ids = args.key_speaker_ids
-  hparams.load_optimisation = args.load_optimisation == 1
-  hparams.reset_learning_rate_optimiser_epoch = args.reset_learning_rate_optimiser_epoch == 1
+  hparams.load_optimisation = not args.dont_load_optimisation
+  hparams.reset_learning_rate_optimiser_epoch = args.reset_learning_rate_optimiser_epoch
   hparams.start_global_step = args.start_global_step
-  hparams.model_sync_folder= args.model_sync_folder
-  hparams.save_prev_backup= args.save_prev_backup == 1
+  hparams.model_sync_folder = args.model_sync_folder
+  hparams.save_prev_backup = not args.dont_save_prev_backup
 
   _initialise_in_train_manifest_with_default_values(output_path, hparams)
   return hparams
