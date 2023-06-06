@@ -8,19 +8,19 @@ import librosa
 import sounddevice as sd
 import soundfile as sf
 
-import readchar
-
 import numpy as np
 import matplotlib.pyplot as plt
 import soundfile as sf
 
+module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(module_dir)
+
+from text import _clean_text 
+
+
 def save_wave_image_as_png(audio_file_path):
     img_save_path = os.path.dirname(audio_file_path)
-
-    # Load audio file
     audio, sr = sf.read(audio_file_path)
-
-    # Get time axis
     duration = len(audio) / sr
     time = np.linspace(0, duration, len(audio))
 
@@ -32,7 +32,6 @@ def save_wave_image_as_png(audio_file_path):
     plt.title('Audio Waveform')
     plt.grid(True)
 
-    # Save waveform as image
     waveform_image_path = img_save_path + "/waveform.png"
     plt.savefig(waveform_image_path, dpi=300, bbox_inches='tight')
     plt.close()
@@ -51,11 +50,13 @@ def read_metadata_file(file_name):
     return lines
 
 
-def play_audio(audio_file_path):
+def play_audio(audio_file_path, is_play_list_mode):
     save_wave_image_as_png(audio_file_path)
     y, sr = librosa.load(audio_file_path, sr=None)
     sd.play(y, sr)
-    sd.wait()
+    if (is_play_list_mode):
+        sd.wait()
+    return y, sr
 
 
 def record_audio(recording_device, sample_rate, audio_file_path):
@@ -82,7 +83,6 @@ def record_audio(recording_device, sample_rate, audio_file_path):
     save_wave_image_as_png(audio_file_path)
 
 
-
 def check_if_overwrite_intended(audio_file_path):
     overwrite = True
     if os.path.exists(audio_file_path):
@@ -104,7 +104,6 @@ def initiate_transcript_recording(recording_device, sample_rate, audio_file_path
 
 
 def main():
-    # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Metadata player recorder tool for extended LJSpeech dataset.", add_help=False)
     parser.add_argument("-l", "--list_devices", action="store_true", help="list to devices for audio recording.")
     args, _ = parser.parse_known_args()
@@ -114,60 +113,62 @@ def main():
         parser.exit(0)
 
     parser = argparse.ArgumentParser(description="Metadata player recorder tool for extended LJSpeech dataset.")
+    parser.add_argument('--auto_play', action="store_true", help='Start playback on line entry.')
+    parser.add_argument('--play_list', action="store_true", help='Play corpous as a play list.')
+    parser.add_argument("--ipa", action="store_true", help="Show IPA for each transcript line.")
     parser.add_argument("-f", "--filename", type=str, required=True, help="Path to metadata file.")
     parser.add_argument("-s", "--start", type=int, default=1, help="Line number to start at.")
     parser.add_argument("-d", "--device", default=-1, type=int, help="Device # from -l|--list-devices to use for audio recording.")
-    parser.add_argument('-r', '--sample_rate', type=int, default=44100, help='Sampling rate to use in recording.')
+    parser.add_argument('-r', '--rec_sample_rate', type=int, default=44100, help='Sampling rate to use in recording.')
+    parser.add_argument("--text_cleaners", nargs="+", default=["en_training_clean_and_phonemize"], help="Used in conjunction with --ipa.")
     args = parser.parse_args()
 
     recording_device = args.device
-    sample_rate = args.sample_rate
+    rec_sample_rate = args.rec_sample_rate
 
-    # Open metadata file and read lines
     lines = read_metadata_file(args.filename)
 
-    # Iterate through lines
     i = args.start - 1  # Subtract 1 because list indices start at 0
     while i < len(lines):
+        os.system("cls" if os.name == "nt" else "clear")
+
         line = lines[i]
         audio_file_path, speaker, transcript = line.strip().split("|")
 
-        # Display line number and transcript
         print(f"Line {i+1}")
         print(f"\n{transcript}\n\n")
 
-        # Check if audio file exists
+        if (args.ipa):
+            ipa_text = _clean_text(transcript, args.text_cleaners)
+            print(f"\n{ipa_text}\n\n")
         if not os.path.exists(audio_file_path):
             print(f"Audio file: {audio_file_path} missing or needs to be recorded!")
-        else:
-            # Play audio and handle keyboard input
-            play_audio(audio_file_path)
+        elif (args.auto_play):
+            pb_audio, pb_sr = play_audio(audio_file_path, args.play_list)
         while True:
-            key = readchar.readkey()
-            if key == ' ':
-                if sd.is_playing():
-                    sd.stop()
-                else:
-                    play_audio(audio_file_path)
-            elif key == 'n':
+            if (args.play_list):
+                i += 1
+                break
+            else:
+                key = readchar.readkey()
+            if key == 'q':
+                sd.stop()
+            elif (key == 'n') or (key == ' '):
                 i += 1
                 break
             elif key == 'p':
                 i -= 1
                 break
             elif key == 'r':
-                play_audio(audio_file_path)
+                play_audio(audio_file_path, args.play_list)
             elif key == 'x':
                 if (recording_device == -1):
                     print("Restart the script and specify the audio device number to use for recording at the command line.")
                 else:
-                    initiate_transcript_recording(recording_device, sample_rate, audio_file_path)
+                    initiate_transcript_recording(recording_device, rec_sample_rate, audio_file_path)
             elif key == 'l':
                 lines = read_metadata_file(args.filename)
                 break
-
-        # Clear console
-        os.system("cls" if os.name == "nt" else "clear")
 
 
 if __name__ == "__main__":

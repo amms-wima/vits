@@ -34,8 +34,8 @@ def save_wave_image_as_png(audio_file_path, output_path):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Removes the first & last 350ms from audio track.")
-    parser.add_argument("-s", "--source_dir", help="Source directory (htdemucs).", required=True)
+    parser = argparse.ArgumentParser(description="Generates image wavforms for each audio track for inspection.")
+    parser.add_argument("-s", "--source_dir", help="Source directory.", required=True)
     parser.add_argument("-o", "--output_dir", help="Output directory.", required=True)
 
     args = parser.parse_args()

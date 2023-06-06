@@ -42,23 +42,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Trims the first & last specified ms from audio track.")
     parser.add_argument("-s", "--source_dir", help="Source directory.", required=True)
     parser.add_argument("-o", "--output_dir", help="Output directory.", required=True)
-    parser.add_argument("-hp", "--head_pos", default=250, type=int, help="Head position.")
-    parser.add_argument("-tp", "--tail_pos", default=100, type=int, help="Tail position.")
+    parser.add_argument("-ht", "--head_trim", default=250, type=int, help="Head trim length.")
+    parser.add_argument("-tt", "--tail_trim", default=100, type=int, help="Tail trim length.")
     parser.add_argument("-swi", "--save_wav_img", action="store_true", help="Create wav images for visual audio inspection.")
 
     args = parser.parse_args()
 
     src_dir = args.source_dir
     out_dir = args.output_dir
-    head_pos = args.head_pos
-    tail_pos = args.tail_pos
+    head_trim = args.head_trim
+    tail_trim = args.tail_trim
 
-    print(f"stripping {head_pos}ms from head; {tail_pos}ms from tail")
+    os.makedirs(os.path.dirname(out_dir), exist_ok=True)
+
+    print(f"stripping {head_trim}ms from head; {tail_trim}ms from tail")
     idx = 1
     for filename in os.listdir(src_dir):
         if filename.endswith('.wav'):
             file_path = os.path.join(src_dir, filename)
-            modified_audio = silence_audio_head_and_tail(file_path, head_pos, tail_pos)
+            modified_audio = silence_audio_head_and_tail(file_path, head_trim, tail_trim)
             output_path = os.path.join(out_dir, filename)
             modified_audio.export(output_path, format='wav')
             if (args.save_wav_img):
