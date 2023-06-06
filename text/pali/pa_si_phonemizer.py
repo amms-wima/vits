@@ -1,76 +1,82 @@
-SPECIAL_MAPPING = {
-    "'s": "z",
-    "’s": "z",
-    "bh": "bˈ",
-    "ch": "tʃˈ",
-    "ḍh": "d",
-    "dh": "ddˈ", 
-    "gh": "ɡˈ",
-    "jh": "dʒˈ",
-    "kh": "kˈ",
-    "ph": "p",
-    "ṭh": "tˈ",
-    "th": "θhˈ",
+# Referenced sources: 
+# https://www.dhammatalks.org/books/ChantingGuide/Section0003.html
+# https://www.antvaset.com/c/21hf103jp3 > settings > Google cloud TTS > Eng India > Voice B male
+# https://readingfaithfully.org/pali-word-pronunciation-recordings
 
-    # promoted from PALI_IPA_MAP in order to support additional rules
-    "j": "d͡ʒ",
+MAPPING = {
+    # replacements
+    "ṭh":    "ṭ",   # silence the 'h'
+    "ja":    "ʤɑ",   # retain 'ja' combo but all other a -> ə
+    "ya":    "yɑ",   # retain 'ya' combo but all other a -> ə
 
-    # additional rules based on sinhalese pronunciations
-    "aya": "əjˈə",
-    "bˈa": "bˈɑːɹ", 
-    "da": "dθɑːɹ",   
-    "ñā": "ŋjjˈɑːɹ", 
-    "vi": "vɪˈ",
+    # vowels
+    "a":    "ə",
+    "ā":    "ɑɑ",
+    "e":    "ɛ",
+    "i":    "ɪ",
+    "ī":    "ɪɪ",
+    "o":    "oː",
+    "u":    "uː",
+    "ū":    "uːuː",
+
+    # consonants
+    # "b":    "b",
+    "c":    "ʧ",
+    "d":    "ð",
+    "ḍ":    "ɖˌ",
+    # "f":    "f",
+    "g":    "ɡ",
+    # "ɡh":   "gʰ",   # frequencies are too low for g & ʰ
+    # "h":    "h",
+    "ḥ":    "h",
+    "j":    "ʤ",
+    # "k":    "k",
+    # "l":    "l",
+    "ḹ":    "lˈ",
+    "ḷ":    "lˌ",
+    # "m":    "m",
+    # "ṁ":    "mgʰ",
+    # "ṃ":    "mɡ",
+    "ṁ":    "mˈ",
+    "ṃ":    "mˌ",
+    # "n":    "n",
+    "ññ":    "nˈjj",
+    "ñ":    "nˈ",
+    "ṅ":    "ŋˈ",
+    "ṇ":    "nˌ",
+    "o":    "ɒ",
+    # "p":    "p",
+    "q":    "k",
+    "r":    "ɹ",
+    # "s":    "s",
+    "t":    "θ",
+    "ṭ":    "ʈˌ",
+    # "v":    "v",
+    "w":    "v",
+    "x":    "ɛk",
+    "y":    "j",
+    # "z":    "z",
+    "'s":   "z",
 }
 
-PALI_IPA_MAP = {
-    "a": "ɑː",
-    "ā": "ɑːɹ", 
-    "c": "t͡ʃ",
-    "ḍ": "d", 
-    "e": "ɛ",
-    "g": "ɡ",
-    "ḥ": "h",
-    "ī": "iː",
-    "i": "ɪ",
-    "l": "l̩",
-    "ḹ": "li",
-    "ḷ": "l",
-    "ṁ": "m̩",
-    "ṃ": "m̩",
-    "ṇ": "n̩",
-    "n": "nn",
-    "ñ": "ŋ",
-    "ṅ": "ŋ",
-    "o": "ɔː",  
-    "q": "k",
-    "ṛ": "ɹ",
-    "ṝ": "ɹi",
-    "r": "ɹɹ",
-    "t": "tθ",
-    "ṭ": "t",
-    "ū": "uː",
-    "u": "ˈuː",
-    "x": "ɛk",
-    "y": "j",
-}
-
-SINHALA_ENDINGS = {
-    "ɑː": "ˈə"
+MODIFY_ENDINGS = {
+    "ˈ": "",
+    "ˌ": "",
+    "ɑ": "ˈə"
 }
 
 def pali_to_ipa(pali_text, debug=False):
     pali_text = pali_text.lower()
     if debug:
         print(pali_text)
-    pali_text = _process_special_combos(pali_text, debug)
-    ipa_text = _process_single_characters(pali_text, debug)
+    ipa_text = _apply_pali_mappings(pali_text, debug)
     ipa_text = _finalise_endings(ipa_text, debug)
+    # ipa_text = _remove_tailing_stress(ipa_text, debug)
     return ipa_text
 
 
-def _process_special_combos(pali_text, debug):
-    for k, v in SPECIAL_MAPPING.items():    # Replace special characters first
+def _apply_pali_mappings(pali_text, debug):
+    for k, v in MAPPING.items():    # Replace special characters first
         pali_text = pali_text.replace(k, v)
         if debug:
             print(f"[{k}->{v}] \t {pali_text}")
@@ -79,29 +85,20 @@ def _process_special_combos(pali_text, debug):
     return pali_text
 
 
-def _process_single_characters(pali_text, debug):
-    ipa_text = ""
-    for i, char in enumerate(pali_text):
-        if (char in PALI_IPA_MAP):
-            ipa_text += PALI_IPA_MAP[char]
-            if debug:
-                print(
-                    f"{i}: [{char} -> {PALI_IPA_MAP[char]}] \t\t {ipa_text}"
-                )
-        else:
-            ipa_text += char
-            if debug:
-                print(f"{i}: [{char} == {char}] \t\t {ipa_text}")
-    if debug:
-        print(f"\n{ipa_text}")
-    return ipa_text
+
+# def _remove_tailing_stress(ipa_text, debug):
+#     if (ipa_text.endswith('ˈ') or (ipa_text.endswith('ˌ'))):
+#         if debug:
+#             print(f"removed tailing: {ipa_text[-1:]}")
+#         ipa_text = ipa_text[:-1]
+#     return ipa_text
 
 
 def _finalise_endings(ipa_text, debug):
     splits = ipa_text.split(" ")
     joins = []
     for split in splits:
-        for k, v in SINHALA_ENDINGS.items():
+        for k, v in MODIFY_ENDINGS.items():
             if (split.endswith(k)):
                 # split = split.replace(k, v)
                 split = split[:-len(k)] + v

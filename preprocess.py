@@ -6,6 +6,7 @@ from utils import load_filepaths_and_text
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
+  parser.add_argument("--replace_ext", action="store_true")
   parser.add_argument("--out_extension", default="cleaned.csv")
   parser.add_argument("--text_index", default=1, type=int)
   parser.add_argument("--filelists", nargs="+", default=["filelists/ljs_audio_text_val_filelist.txt", "filelists/ljs_audio_text_test_filelist.txt"])
@@ -13,14 +14,18 @@ if __name__ == '__main__':
 
   args = parser.parse_args()
     
-
+  print(f"Using args: {args}")
   min_pho_len = None
   max_pho_len = 0
   for filelist in args.filelists:
     filepaths_and_text = load_filepaths_and_text(filelist)
     total_lines = len(filepaths_and_text)
     print(f"preprocess: [{total_lines}] {filelist}")
-    new_filelist = filelist[:-3] + args.out_extension
+    if (args.replace_ext):
+      new_filelist = filelist[:-3] + args.out_extension
+    else:
+      new_filelist = filelist + "." + args.out_extension
+    print(f"Saving to: {new_filelist}")
     with open(new_filelist, "w", encoding="utf-8") as f:
       with tqdm(total=total_lines) as pbar:
         for i in range(total_lines):

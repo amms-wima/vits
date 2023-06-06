@@ -28,6 +28,7 @@ logger = logging.getLogger()
 
 
 class TextToSpeech():
+    _DEFAULT_CLEANERS = ["en_training_clean_and_phonemize"]
     _DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
     _REMOVE_LIST = ["\"", "'", "“", "”"]
     _REMAIN_PUNC_REGEX = r'(?<=[^A-Z].[;:…])\s+'
@@ -41,7 +42,7 @@ class TextToSpeech():
 
 
     def __init__(self):
-        if (TextToSpeech._HPS is None or TextToSpeech._CLI_CFG is None):
+        if (TextToSpeech._CLI_CFG is None):
             raise Exception("TextToSpeech.init() should be called prior to instantiation!")
 
 
@@ -61,18 +62,50 @@ class TextToSpeech():
 
     @staticmethod
     def init(config: any):
-        hps = utils.get_hparams_from_file(args.config_path)
-        if (TextToSpeech._HPS is None):
+        TextToSpeech._CLI_CFG = config
+        hps = None
+        if (config.config_path is None):
+            if (config.verbose):
+                logger.debug(f"Using default cleaners: {TextToSpeech._DEFAULT_CLEANERS}")
+        else:
+            hps = utils.get_hparams_from_file(config.config_path)
+        if (TextToSpeech._HPS is None and hps is not None):
             TextToSpeech._HPS = hps
-        if (TextToSpeech._CLI_CFG is None):
-            TextToSpeech._CLI_CFG = config
-        
         if (TextToSpeech._SEGMENTER is None):
             TextToSpeech._prepare_segmenter()
         if (TextToSpeech._NET_G is None and not TextToSpeech._CLI_CFG.no_infer):
             TextToSpeech._prepare_model()
+            TextToSpeech._SID = LongTensor([TextToSpeech._CLI_CFG.sid]).to(TextToSpeech._DEVICE)
 
-        TextToSpeech._SID = LongTensor([TextToSpeech._CLI_CFG.sid]).to(TextToSpeech._DEVICE)
+
+    def _text_to_tensor(self, text):
+        if (TextToSpeech._CLI_CFG.read_as_ipa):
+            ipa_seg = text
+            text_norm = cleaned_text_to_sequence(text)
+        else:
+            cleaners =  TextToSpeech._DEFAULT_CLEANERS if (TextToSpeech._HPS is None) else TextToSpeech._HPS.data.text_cleaners
+            text_norm, ipa_seg = text_to_sequence(text, cleaners)
+        if ((TextToSpeech._HPS is not None) and (TextToSpeech._HPS.data.add_blank)):
+            text_norm = commons.intersperse(text_norm, 0)
+        text_norm = LongTensor(text_norm)
+        return text_norm, ipa_seg
+
+    
+    def _synthesize_segment(self, text):
+        audio = None
+        stn_tst, ipa_seg = self._text_to_tensor(text)
+        if (not TextToSpeech._CLI_CFG.no_infer):
+            with no_grad():
+                x_tst = stn_tst.unsqueeze(0).to(TextToSpeech._DEVICE)
+                x_tst_lengths = LongTensor([stn_tst.size(0)]).to(TextToSpeech._DEVICE)
+                audio = TextToSpeech._NET_G.infer(x_tst, x_tst_lengths, sid=TextToSpeech._SID, 
+                        noise_scale=TextToSpeech._CLI_CFG.noise_scale, 
+                        noise_scale_w=TextToSpeech._CLI_CFG.noise_scale_w,
+                        length_scale=1.0 / TextToSpeech._CLI_CFG.length_scale
+                    )[0][0, 0].data.cpu().float().numpy()
+            del x_tst, x_tst_lengths
+        del stn_tst
+        return audio, ipa_seg
 
 
     @staticmethod
@@ -93,34 +126,6 @@ class TextToSpeech():
         path = os.path.splitext(path)[0] + ".ipa"
         with open(path, "w") as f:
             f.write(text)
-
-
-    def _text_to_tensor(self, text):
-        if (TextToSpeech._CLI_CFG.read_as_ipa):
-            ipa_seg = text
-            text_norm = cleaned_text_to_sequence(text)
-        else:
-            text_norm, ipa_seg = text_to_sequence(text, TextToSpeech._HPS.data.text_cleaners)
-        if (TextToSpeech._HPS.data.add_blank):
-            text_norm = commons.intersperse(text_norm, 0)
-        text_norm = LongTensor(text_norm)
-        return text_norm, ipa_seg
-
-    
-    def _synthesize_segment(self, text):
-        audio = None
-        stn_tst, ipa_seg = self._text_to_tensor(text)
-        if (not TextToSpeech._CLI_CFG.no_infer):
-            with no_grad():
-                x_tst = stn_tst.unsqueeze(0).to(TextToSpeech._DEVICE)
-                x_tst_lengths = LongTensor([stn_tst.size(0)]).to(TextToSpeech._DEVICE)
-                audio = TextToSpeech._NET_G.infer(x_tst, x_tst_lengths, sid=TextToSpeech._SID, 
-                        noise_scale=TextToSpeech._CLI_CFG.noise_scale, 
-                        noise_scale_w=TextToSpeech._CLI_CFG.noise_scale_w,
-                        length_scale=1.0 / TextToSpeech._CLI_CFG.length_scale
-                    )[0][0, 0].data.cpu().float().numpy()
-            del stn_tst, x_tst, x_tst_lengths
-        return audio, ipa_seg
 
 
     @staticmethod
@@ -206,6 +211,8 @@ class AbstractSourceTextToSpeech():
                     continue
                 file_audio, ipa_line = self.tts_synthesizer.synthesize(text, file_audio)
                 ipa_text += ("" if i == 0 else "\n") + ipa_line
+        if (TextToSpeech._CLI_CFG.verbose and not TextToSpeech._CLI_CFG.read_as_ipa):
+            logger.debug(f"Resultant IPA\n:[{ipa_text}]\n")
         mp3 = TextToSpeech._CLI_CFG.mp3
         if (TextToSpeech._CLI_CFG.prepend_sid_in_filename):
             dir, fn  = os.path.split(self.output_file)
@@ -213,8 +220,9 @@ class AbstractSourceTextToSpeech():
             self.output_file = os.path.join(dir, f"s{sid}-{fn}")
         if (TextToSpeech._CLI_CFG.save_ipa_file):
             TextToSpeech.save_ipa_file(ipa_text, self.output_file)
-        if (not TextToSpeech._CLI_CFG.test):
+        if ((not TextToSpeech._CLI_CFG.no_infer) and (not TextToSpeech._CLI_CFG.test)):
             TextToSpeech.save_audio_file(file_audio, self.output_file, mp3)
+        return self.output_file
 
 
     def _open_src_stream_as_iterable(self): 
@@ -252,6 +260,7 @@ class TextDirectoryToSpeech():
         self.root_output_dir = root_output_dir
 
     def synthesize(self):
+        last_ret_val = None
         if self.recurse_dirs:
             for dirpath, dirnames, filenames in os.walk(self.root_src_dir):
                 rel_dirpath = os.path.relpath(dirpath, self.root_src_dir)
@@ -262,54 +271,35 @@ class TextDirectoryToSpeech():
                     if fnmatch.fnmatch(filename, self.filter):
                         src_file = os.path.join(dirpath, filename)
                         output_file = self._get_output_filename(src_file)
-                        self._synthesize_file(src_file, output_file)
+                        last_ret_val = self._synthesize_file(src_file, output_file)
         else:
             files = glob.glob(os.path.join(self.root_src_dir, self.filter))
             for src_file in files:
                 output_file = self._get_output_filename(src_file)
-                self._synthesize_file(src_file, output_file)
-
+                last_ret_val = self._synthesize_file(src_file, output_file)
+        return last_ret_val
+    
 
     def _synthesize_file(self, src_file, output_file):
         tts_app = TextFileToSpeech(src_file, output_file)
-        tts_app.synthesize()
+        return tts_app.synthesize()
 
 
     def _get_output_filename(self, src_file):
         rel_file = os.path.relpath(src_file, self.root_src_dir)
-        filename = os.path.basename(rel_file)
         output_file = os.path.join(self.root_output_dir, rel_file)
         output_file = os.path.splitext(output_file)[0] + ".wav"
         return output_file
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='vits tts')
-    parser.add_argument('-m', '--model_path', type=str, default="./build/G^latest.pth")
-    parser.add_argument('-c', '--config_path', type=str, default="./build/config.json")
-    parser.add_argument('-s', '--sid', type=int)
-    parser.add_argument('-t', '--text_file', type=str, help="Source file to TTS processing.")
-    parser.add_argument('-d', '--root_dir', type=str, help="Source root directory to start file TTS processing.")
-    parser.add_argument('-f', '--filter', type=str, default="*.txt", help="Filter to use for text file selections in directories")
-    parser.add_argument('-r', '--recurse_dirs', action="store_true", help="Process directories recursively when -d is specified.")
-    parser.add_argument('-of', '--output_file', type=str, help="Audio save-as filename if -t or stdin is specified.")
-    parser.add_argument('-od', '--output_dir', type=str, help="Root output directory if -d is specified.")
-    parser.add_argument('-ns', '--noise_scale', type=float,default=.667)
-    parser.add_argument('-nsw', '--noise_scale_w', type=float,default=0.6)
-    parser.add_argument('-ls', '--length_scale', type=float,default=1)
-    parser.add_argument('--prepend_sid_in_filename', action="store_true")
-    parser.add_argument('--test', action="store_true", help="Test everything except saving audio.")
-    parser.add_argument('--mp3', action="store_true", help="Save as mp3 rather than wav file.")
-    parser.add_argument('--no_infer', action="store_true", help="Dont run the inference; used with --save_ipa_file.")
-    parser.add_argument('--save_ipa_file', action="store_true", help="Save IPA text file to stage processing.")
-    parser.add_argument('--read_as_ipa', action="store_true", help="Process the source as IPA souce and by-pass cleaning & phonemization.")
-    parser.add_argument('--stdin', action="store_true", help="Use standard input instead of file source.")
-    parser.add_argument('--verbose', action="store_true")
-    args = parser.parse_args()
-
+def tts_cli(args):
     app = None
     if (((args.text_file is None) and (args.root_dir is None) and (not args.stdin)) or ((args.text_file is not None) and (args.root_dir is not None) and (args.stdin))):
-        raise Exception("Specify only one of either text_file or root_dir, stdin")
+        raise Exception("Specify one of either text_file or root_dir, stdin")
+    if ((not args.no_infer) and (args.config_path is None)):
+        raise Exception("Specify one of either no_infer or config_path")
+
+    output_name = None
     if (args.output_file is not None):
         output_name = Path(args.output_file)
         output_name.parent.mkdir(parents=True, exist_ok=True)
@@ -328,4 +318,31 @@ if __name__ == "__main__":
         app = TextFileToSpeech(args.text_file, output_name)
     else:
         app = TextDirectoryToSpeech(args.root_dir, args.filter, args.recurse_dirs, output_name)
-    app.synthesize()
+    return app.synthesize()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='vits tts')
+    parser.add_argument('-m', '--model_path', type=str)
+    parser.add_argument('-c', '--config_path', type=str)
+    parser.add_argument('-s', '--sid', type=int)
+    parser.add_argument('-t', '--text_file', type=str, help="Source file to TTS processing.")
+    parser.add_argument('-d', '--root_dir', type=str, help="Source root directory to start file TTS processing.")
+    parser.add_argument('-f', '--filter', type=str, default="*.txt", help="Filter to use for text file selections in directories")
+    parser.add_argument('-r', '--recurse_dirs', action="store_true", help="Process directories recursively when -d is specified.")
+    parser.add_argument('-of', '--output_file', type=str, help="Audio save-as filename if -t or stdin is specified.")
+    parser.add_argument('-od', '--output_dir', type=str, help="Root output directory if -d is specified.")
+    parser.add_argument('-ns', '--noise_scale', type=float,default=.667)
+    parser.add_argument('-nsw', '--noise_scale_w', type=float,default=0.6)
+    parser.add_argument('-ls', '--length_scale', type=float,default=1)
+    parser.add_argument('--prepend_sid_in_filename', action="store_true")
+    parser.add_argument('--test', action="store_true", help="Test everything except saving audio.")
+    parser.add_argument('--mp3', action="store_true", help="Save as mp3 rather than wav file.")
+    parser.add_argument('--no_infer', action="store_true", help="Dont run the inference; used for phonemization only tasks.")
+    parser.add_argument('--save_ipa_file', action="store_true", help="Save IPA text file to stage processing.")
+    parser.add_argument('--read_as_ipa', action="store_true", help="Process the source as IPA and by-pass cleaning & phonemization.")
+    parser.add_argument('--stdin', action="store_true", help="Use standard input instead of file source.")
+    parser.add_argument('--verbose', action="store_true")
+    args = parser.parse_args()
+
+    tts_cli(args)

@@ -29,6 +29,7 @@ function install_vits_project() {
     mkdir monotonic_align
     python setup.py build_ext --inplace
 
+    cd ..
     mkdir -p build
 }
 

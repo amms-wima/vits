@@ -122,10 +122,10 @@ def _realign_optimizer_tensor_size_where_reqd(saved_state_dict, idx_diff_dict):
       padding = torch.zeros((diff_rows, saved_exp_avg.shape[1]), dtype=saved_exp_avg.dtype)
       saved_state_dict['state'][key]['exp_avg'] = torch.cat((saved_exp_avg, padding), dim=0)
 
-      if 'exp_avg_sq' in saved_state_dict['state'][key]:
-        saved_exp_avg_sq = saved_state_dict['state'][key]['exp_avg_sq']
-        padding = torch.zeros((diff_rows, saved_exp_avg_sq.shape[1]), dtype=saved_exp_avg_sq.dtype)
-        saved_state_dict['state'][key]['exp_avg_sq'] = torch.cat((saved_exp_avg_sq, padding), dim=0)
+    if 'exp_avg_sq' in saved_state_dict['state'][key]:
+      saved_exp_avg_sq = saved_state_dict['state'][key]['exp_avg_sq']
+      padding = torch.zeros((diff_rows, saved_exp_avg_sq.shape[1]), dtype=saved_exp_avg_sq.dtype)
+      saved_state_dict['state'][key]['exp_avg_sq'] = torch.cat((saved_exp_avg_sq, padding), dim=0)
 
 
 def sync_checkpoint(checkpoint, prev_cp, hps):
