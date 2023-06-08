@@ -6,12 +6,12 @@
 MAPPING = {
     # replacements
     "ṭh":    "ṭ",   # silence the 'h'
-    "ja":    "ʤɑː",   # retain 'ja' combo but all other a -> ʌ
-    "ya":    "yɑː",   # retain 'ya' combo but all other a -> ʌ
+    "ja":    "ʤɑ",   # retain 'ja' combo but all other a -> ə
+    "ya":    "yɑ",   # retain 'ya' combo but all other a -> ə
 
     # vowels
-    "a":    "ʌ",
-    "ā":    "ɑːɑː",
+    "a":    "ə",
+    "ā":    "ɑɑ",
     "e":    "ɛ",
     "i":    "ɪ",
     "ī":    "ɪɪ",
@@ -23,7 +23,7 @@ MAPPING = {
     # "b":    "b",
     "c":    "ʧ",
     "d":    "ð",
-    "ḍ":    "dˌ",
+    "ḍ":    "ɖˌ",
     # "f":    "f",
     "g":    "ɡ",
     # "ɡh":   "gʰ",   # frequencies are too low for g & ʰ
@@ -51,7 +51,6 @@ MAPPING = {
     # "s":    "s",
     "t":    "θ",
     "ṭ":    "ʈˌ",
-    "ʈ":    "t",
     # "v":    "v",
     "w":    "v",
     "x":    "ɛk",
@@ -63,7 +62,7 @@ MAPPING = {
 MODIFY_ENDINGS = {
     "ˈ": "",
     "ˌ": "",
-    "ɑː": "ˈʌ"
+    "ɑ": "ˈə"
 }
 
 def pali_to_ipa(pali_text, debug=False):
