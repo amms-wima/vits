@@ -54,9 +54,13 @@ def play_audio(audio_file_path, is_play_list_mode):
     save_wave_image_as_png(audio_file_path)
     y, sr = librosa.load(audio_file_path, sr=None)
     sd.play(y, sr)
+    pl_pause = False
     if (is_play_list_mode):
-        sd.wait()
-    return y, sr
+        try:
+            sd.wait()
+        except KeyboardInterrupt:
+            pl_pause = True
+    return y, sr, pl_pause
 
 
 def record_audio(recording_device, sample_rate, audio_file_path):
@@ -134,8 +138,9 @@ def main():
 
         line = lines[i]
         audio_file_path, speaker, transcript = line.strip().split("|")
+        pl_pause = False
 
-        print(f"Line {i+1}")
+        print(f"Line {i+1} - {audio_file_path}")
         print(f"\n{transcript}\n\n")
 
         if (args.ipa):
@@ -144,9 +149,9 @@ def main():
         if not os.path.exists(audio_file_path):
             print(f"Audio file: {audio_file_path} missing or needs to be recorded!")
         elif (args.auto_play):
-            pb_audio, pb_sr = play_audio(audio_file_path, args.play_list)
+            pb_audio, pb_sr, pl_pause = play_audio(audio_file_path, args.play_list)
         while True:
-            if (args.play_list):
+            if (args.play_list and not pl_pause):
                 i += 1
                 break
             else:
@@ -161,6 +166,8 @@ def main():
                 break
             elif key == 'r':
                 play_audio(audio_file_path, args.play_list)
+            elif key == 't':
+                pl_pause = not pl_pause
             elif key == 'x':
                 if (recording_device == -1):
                     print("Restart the script and specify the audio device number to use for recording at the command line.")

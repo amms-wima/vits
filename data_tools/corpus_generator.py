@@ -4,6 +4,7 @@ import whisper
 
 def transcribe_audio_files(source_directory, output_corpus, whisper_size):
     audio_files = [file for file in os.listdir(source_directory) if file.endswith(".wav")]
+    audio_files = sorted(audio_files)
     model = whisper.load_model(whisper_size)
 
     with open(output_corpus, 'w', encoding='utf-8') as f:
@@ -12,6 +13,7 @@ def transcribe_audio_files(source_directory, output_corpus, whisper_size):
             transcribe_options = dict(task="transcribe")
             json = model.transcribe(file_path, **transcribe_options)
             text = json['text'].strip()
+            print(f"{audio_file}: {text}")
             corpus_entry = f"{file_path}|sid|{text}\n"
             f.write(corpus_entry)
 
