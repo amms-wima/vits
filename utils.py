@@ -325,7 +325,7 @@ def get_hparams(init=True):
   hparams.model_sync_folder = args.model_sync_folder
   hparams.save_prev_backup = not args.dont_save_prev_backup
 
-  _initialise_in_train_manifest_with_default_values(output_path, hparams)
+  _initialise_in_train_manifest_with_default_values(args, output_path, hparams)
   return hparams
 
 
@@ -349,7 +349,7 @@ def _read_config_and_save_output_path(init, args):
     return output_path, config
 
 
-def _initialise_in_train_manifest_with_default_values(output_path, hparams):
+def _initialise_in_train_manifest_with_default_values(cli_args, output_path, hparams):
     hparams.in_train_manifest_path = os.path.join(output_path, "in_train_manifest.json")
     hparams.in_train_manifest = {}
     hparams.in_train_manifest["last_updated"] = "<pending>"
@@ -360,10 +360,12 @@ def _initialise_in_train_manifest_with_default_values(output_path, hparams):
     hparams.in_train_manifest["latest_step"] = -1  
     hparams.in_train_manifest["after_save"] = False  
     hparams.in_train_manifest["chg_eval_interval"] = -1
+    hparams.in_train_manifest["summed_losses"] = -1
     hparams.in_train_manifest["best_model"] = {}
     hparams.in_train_manifest["best_model"]["iteration"] = -1
     hparams.in_train_manifest["best_model"]["step"] = -1
     hparams.in_train_manifest["best_model"]["losses"] = None
+    hparams.in_train_manifest["cli_args"] = vars(cli_args)
 
 
 def _serialize_tensor(tensor):
