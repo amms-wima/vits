@@ -30,7 +30,6 @@ function install_vits_project() {
     python setup.py build_ext --inplace
 
     cd ..
-    mkdir -p build
 }
 
 function install_vits_dependencies() {

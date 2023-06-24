@@ -46,7 +46,7 @@ function sync_gdrive_checkpoints() {
         l_timestamp="$timestamp"
         case $event in
             CLOSE_WRITE*)
-                if [[ $file =~ ^(G|D)(\^|_)?latest\.pth$ || $file == "in_train_manifest.json" || $file == "config.json" ]]; then
+                if [[ $file =~ ^(G|D)(\^|_)?latest\.pth$ || $file =~ ^.*\.json$ ]]; then
                     if [ "${VITS_DEBUG}" = "1" ]; then
                         echo "  processing: $file"
                     fi
@@ -95,13 +95,11 @@ function main() {
     fi
 
     if [[ ! -d $vits_build ]]; then
-        echo "ERROR: vits_build directory does not exist: $vits_build"
-        exit 1
+        mkdir -p $vits_build
     fi
 
     if [[ ! -d $vits_sync_build ]]; then
-        echo "ERROR: vits_sync_build directory does not exist: $vits_sync_build"
-        exit 1
+        mkdir -p $vits_sync_build
     fi
 
     install_inotify_tools
