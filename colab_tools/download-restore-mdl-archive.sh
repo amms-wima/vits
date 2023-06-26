@@ -39,10 +39,7 @@ function main() {
         exit 1
     fi
 
-    if [[ ! -d $build_dir ]]; then
-        echo "ERROR: build_dir directory does not exist: $build_dir"
-        exit 1
-    fi
+    mkdir -p $build_dir
 
     download_restore_model "$build_dir" "$restore_id"
 }

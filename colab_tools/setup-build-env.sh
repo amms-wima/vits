@@ -22,13 +22,12 @@ function install_vits_project() {
     echo "  cloning git repo"
     git clone https://github.com/amms-wima/vits.git
     cd vits
-    git checkout feat_save_best_model
+    git checkout feat_enhanced_tts
     
     echo "  build monotonic_align"
     cd monotonic_align  
     mkdir monotonic_align
     python setup.py build_ext --inplace
-
     cd ..
 }
 
