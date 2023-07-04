@@ -6,7 +6,6 @@ import numpy as np
 import readchar
 import librosa
 import sounddevice as sd
-import soundfile as sf
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -107,6 +106,17 @@ def initiate_transcript_recording(recording_device, sample_rate, audio_file_path
     record_audio(recording_device, sample_rate, audio_file_path)
 
 
+def check_audio(audio_file_path, expected_sr, chk_aud_errs, is_verbose):
+    try:
+        y, sr = librosa.load(audio_file_path, sr=None)
+    except:
+        sr = -1
+    if (is_verbose):
+        print(f"{audio_file_path}|{sr}")
+    if (expected_sr != sr):
+        chk_aud_errs.append(audio_file_path)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Metadata player recorder tool for extended LJSpeech dataset.", add_help=False)
     parser.add_argument("-l", "--list_devices", action="store_true", help="list to devices for audio recording.")
@@ -120,6 +130,8 @@ def main():
     parser.add_argument('--auto_play', action="store_true", help='Start playback on line entry.')
     parser.add_argument('--play_list', action="store_true", help='Play corpous as a play list.')
     parser.add_argument("--ipa", action="store_true", help="Show IPA for each transcript line.")
+    parser.add_argument("--check_audio", action="store_true", help="Check all audio sample rates.")
+    parser.add_argument("--verbose", action="store_true", help="Show detailed information when available.")
     parser.add_argument("-f", "--filename", type=str, required=True, help="Path to metadata file.")
     parser.add_argument("-s", "--start", type=int, default=1, help="Line number to start at.")
     parser.add_argument("-d", "--device", default=-1, type=int, help="Device # from -l|--list-devices to use for audio recording.")
@@ -129,19 +141,24 @@ def main():
 
     recording_device = args.device
     rec_sample_rate = args.rec_sample_rate
+    chk_aud_errs = []
 
     lines = read_metadata_file(args.filename)
 
     i = args.start - 1  # Subtract 1 because list indices start at 0
     while i < len(lines):
-        os.system("cls" if os.name == "nt" else "clear")
-
         line = lines[i]
         audio_file_path, speaker, transcript = line.strip().split("|")
         pl_pause = False
 
-        print(f"Line {i+1} - {audio_file_path}")
-        print(f"\n{transcript}\n\n")
+        if (args.check_audio):
+            check_audio(audio_file_path, rec_sample_rate, chk_aud_errs, args.verbose)
+            i += 1
+            continue
+        else:
+            os.system("cls" if os.name == "nt" else "clear")
+            print(f"Line {i+1} - {audio_file_path}")
+            print(f"\n{transcript}\n\n")
 
         if (args.ipa):
             ipa_text = _clean_text(transcript, args.text_cleaners)
@@ -176,6 +193,11 @@ def main():
             elif key == 'l':
                 lines = read_metadata_file(args.filename)
                 break
+    if (args.check_audio):
+        if (len(chk_aud_errs) > 0):
+            print(f"Entries: {i}; Check Audio Errors:\n{chk_aud_errs}")
+        else:
+            print(f"Entries: {i};No Audio Errors in corpus!")
 
 
 if __name__ == "__main__":

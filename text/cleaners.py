@@ -76,7 +76,7 @@ def _pad_subsection_if_previously(orig_subsection, ipa_ver):
     return ipa_ver
 
 
-def en_pi_si_phonemize(text):
+def en_pi_si_phonemize(text, backend = "espeak", lang="en-us"):
     ret = ''
     sections = re.split(r'[@]', text)
     pali_subsections = re.findall(r'@([^@]+)@', text)
@@ -91,13 +91,13 @@ def en_pi_si_phonemize(text):
             if (trimmed_text in [',', '.']):
               ipa += subsection
             else:
-              en_phonemization = phonemize(trimmed_text, language='en-us', backend='espeak', strip=True, preserve_punctuation=True, with_stress=True)
+              en_phonemization = phonemize(trimmed_text, language=lang, backend=backend, strip=True, preserve_punctuation=True, with_stress=True)
               ipa += en_phonemization
         ret += _pad_subsection_if_previously(subsection, ipa)
     return ret
     
 
-def en_training_clean_and_phonemize(text):
+def en_training_clean_and_phonemize(text, backend = None, lang = None):
     """Pipeline for English text, including number and abbreviation expansion."""
     # text = convert_to_ascii(text)
     text = lowercase(text)
@@ -107,6 +107,6 @@ def en_training_clean_and_phonemize(text):
     text = replace_symbols(text)
     text = remove_aux_symbols(text)
     text = collapse_whitespace(text)
-    text = en_pi_si_phonemize(text)
+    text = en_pi_si_phonemize(text, backend, lang)
     text = collapse_whitespace(text)
     return text

@@ -1,0 +1,5 @@
+readchar
+openai-whisper
+pydub
+sounddevice
+soundfile

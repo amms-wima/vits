@@ -80,7 +80,7 @@ class TextToSpeech():
             text_norm = cleaned_text_to_sequence(text)
         else:
             cleaners =  TextToSpeech._DEFAULT_CLEANERS if (self._hps is None) else self._hps.data.text_cleaners
-            text_norm, ipa_seg = text_to_sequence(text, cleaners)
+            text_norm, ipa_seg = text_to_sequence(text, cleaners, self._config.ph_backend, self._config.ph_lang)
         if ((self._hps is not None) and (self._hps.data.add_blank)):
             text_norm = commons.intersperse(text_norm, 0)
         text_norm = LongTensor(text_norm)
@@ -241,6 +241,7 @@ class AbstractSourceTextToSpeech():
         self._output_file, entry_sid, transcript = line.split("|")
         entry_sid = int(entry_sid)
         if (self._config.sid != entry_sid):
+            logger.info(f"Switching to SID: {entry_sid}")
             self._config.sid = int(entry_sid)
             self._sid = LongTensor([self._config.sid]).to(TextToSpeech._DEVICE)
         return transcript
@@ -369,6 +370,8 @@ if __name__ == "__main__":
     parser.add_argument('-ns', '--noise_scale', type=float,default=.667)
     parser.add_argument('-nsw', '--noise_scale_w', type=float,default=0.6)
     parser.add_argument('-ls', '--length_scale', type=float,default=1)
+    parser.add_argument('-pbe', '--ph_backend', type=str, default="espeak", help="The phonemizer backend to use.")
+    parser.add_argument('-pla', '--ph_lang', type=str, default="en-us", help="The phonemizer language to use.")
     parser.add_argument('--prepend_sid_in_filename', action="store_true")
     parser.add_argument('--test', action="store_true", help="Test everything except saving audio.")
     parser.add_argument('--mp3', action="store_true", help="Save as mp3 rather than wav file.")
