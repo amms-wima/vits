@@ -107,5 +107,5 @@ p294	104
 p257	105
 p276	106
 p308	107
-p351    108
-s5	    109
+s5	    108
+p315    109 [new vctk release provides audio but no transcript! reserve speaker_id 109]
