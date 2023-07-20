@@ -170,6 +170,7 @@ class TextAudioSpeakerLoader(torch.utils.data.Dataset):
         self.add_blank = hparams.add_blank
         self.min_text_len = getattr(hparams, "min_text_len", 1)
         self.max_text_len = getattr(hparams, "max_text_len", 190)
+        print(f"TextAudioSpeakerLoader using [min_text_len:{self.min_text_len}, max_text_len:{self.max_text_len}]")
 
         random.seed(1234)
         random.shuffle(self.audiopaths_sid_text)

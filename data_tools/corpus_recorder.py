@@ -117,6 +117,11 @@ def check_audio(audio_file_path, expected_sr, chk_aud_errs, is_verbose):
         chk_aud_errs.append(audio_file_path)
 
 
+def is_missing(audio_file_path):
+    ret = not os.path.exists(audio_file_path)
+    return ret
+
+
 def main():
     parser = argparse.ArgumentParser(description="Metadata player recorder tool for extended LJSpeech dataset.", add_help=False)
     parser.add_argument("-l", "--list_devices", action="store_true", help="list to devices for audio recording.")
@@ -131,6 +136,7 @@ def main():
     parser.add_argument('--play_list', action="store_true", help='Play corpous as a play list.')
     parser.add_argument("--ipa", action="store_true", help="Show IPA for each transcript line.")
     parser.add_argument("--check_audio", action="store_true", help="Check all audio sample rates.")
+    parser.add_argument("--remove_missing", action="store_true", help="Removes entries from corpus and dumps resultant corpus to STDOUT.")
     parser.add_argument("--verbose", action="store_true", help="Show detailed information when available.")
     parser.add_argument("-f", "--filename", type=str, required=True, help="Path to metadata file.")
     parser.add_argument("-s", "--start", type=int, default=1, help="Line number to start at.")
@@ -150,6 +156,12 @@ def main():
         line = lines[i]
         audio_file_path, speaker, transcript = line.strip().split("|")
         pl_pause = False
+
+        if (args.remove_missing):
+            if (not is_missing(audio_file_path)):
+                print(line.strip())
+            i += 1
+            continue
 
         if (args.check_audio):
             check_audio(audio_file_path, rec_sample_rate, chk_aud_errs, args.verbose)
