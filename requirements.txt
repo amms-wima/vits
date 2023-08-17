@@ -11,4 +11,3 @@ tqdm
 unidecode
 inflect
 phonemizer
-pysbd

@@ -20,7 +20,6 @@ import glob
 import fnmatch
 from tqdm import tqdm
 
-import pysbd
 from text.symbols import symbols
 
 
@@ -31,14 +30,12 @@ logger = logging.getLogger()
 class TextToSpeech():
     _DEFAULT_CLEANERS = ["en_training_clean_and_phonemize"]
     _DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
-    _REMOVE_LIST = ['"', "'", "“", "”"]
-    _REMAIN_PUNC_REGEX = r'(?<=[^A-Z].[?!;:…—-])\s*'
+    _REMAIN_PUNC_REGEX = r'(?<=[.:;?!])\s*'
 
     _MODELS_CACHE = {}
 
     _hps: utils.HParams = None
     _config: any = None
-    _segmenter: pysbd.Segmenter = None
     _net_g: SynthesizerTrn = None
 
     _sid: LongTensor = None
@@ -51,7 +48,6 @@ class TextToSpeech():
                 logger.debug(f"Using default cleaners: {TextToSpeech._DEFAULT_CLEANERS}")
         else:
             self._hps = utils.get_hparams_from_file(self._config.config_path)
-        self._prepare_segmenter()
         if (not self._config.no_infer):
             self._prepare_model()
             if (self._config.sid is not None):
@@ -62,13 +58,21 @@ class TextToSpeech():
         text_segments = self._split_into_segments(text) 
         ipa_text = ""
         for i, text_seg in enumerate(text_segments):
-            cleaned_seg = TextToSpeech._clean_segment(text_seg.strip())
-            if (cleaned_seg == ''):
+            trimmed_seg = text_seg.strip()
+            if (trimmed_seg == ''):
                 continue
-            seg_audio, ipa_seg = self._synthesize_segment(cleaned_seg)
-            pause_dur = TextToSpeech._query_pause_duration(cleaned_seg[-1])
+            # min_len = 21 if (self._config.repunctuate_short_seg) else 16
+            # pad_char = ',' if (self._config.repunctuate_short_seg) else ','
+            # trimmed_seg_len = len(trimmed_seg)
+            # if (trimmed_seg_len < min_len):
+            #     trimmed_seg = ',,' + trimmed_seg + ',,,'
+                # trimmed_seg += ',' + ((min_len - trimmed_seg_len) * pad_char) + ','
+            seg_audio, ipa_seg = self._synthesize_segment(trimmed_seg)
+            pause_dur = TextToSpeech._query_pause_duration(trimmed_seg[-1])
             if (self._config.verbose):
-                logger.debug(f"{text_seg} [pause: {pause_dur}]")
+                logger.debug(f"\nsegment: {trimmed_seg}")
+                logger.debug(f"\tipa: {ipa_seg}")
+                logger.debug(f"\tpause: {pause_dur}")
             concat_audio = self._concat_audio_segment(concat_audio, seg_audio, pause_dur)
             ipa_text += ("" if i == 0 else "\n") + ipa_seg
         return concat_audio, ipa_text
@@ -98,16 +102,10 @@ class TextToSpeech():
                         noise_scale=self._config.noise_scale, 
                         noise_scale_w=self._config.noise_scale_w,
                         length_scale=1.0 / self._config.length_scale
-                    )[0][0, 0].data.cpu().float().numpy()
+                    )[0][0, 0].data.to(TextToSpeech._DEVICE).float().numpy()
             del x_tst, x_tst_lengths
         del stn_tst
         return audio, ipa_seg
-
-
-    def _prepare_segmenter(self):
-        self._segmenter = pysbd.Segmenter(language="en", clean=False)
-        self._segmenter.language_module.Abbreviation.ABBREVIATIONS.append('ven')
-        self._segmenter.language_module.Abbreviation.PREPOSITIVE_ABBREVIATIONS.append('ven')
 
 
     def _prepare_model(self):
@@ -129,12 +127,7 @@ class TextToSpeech():
 
 
     def _split_into_segments(self, text: str) -> list[str]:
-        sentences = self._segmenter.segment(text)
-        segments = []
-        for sentence in sentences:
-            sen_trimmed = sentence.strip()
-            subs = re.split(TextToSpeech._REMAIN_PUNC_REGEX, sen_trimmed)
-            segments += subs
+        segments = re.split(TextToSpeech._REMAIN_PUNC_REGEX, text.strip())
         return segments
 
 
@@ -171,20 +164,15 @@ class TextToSpeech():
 
 
     @staticmethod
-    def _clean_segment(text):
-        for punc in TextToSpeech._REMOVE_LIST:
-            text = text.replace(punc, "")
-        return text
-
-
-    @staticmethod
     def _query_pause_duration(punctuation):
-        if punctuation == '.' or punctuation == ':' or punctuation == ';':
-            pause_duration = 0.5
-        elif punctuation == '?' or punctuation == '!' or punctuation == '…':
-            pause_duration = 0.5
-        elif punctuation == '—':
+        if punctuation == '.':
+            pause_duration = 0.7
+        elif punctuation == '?':
             pause_duration = 0.35
+        elif punctuation == '!':
+            pause_duration = 0.8
+        elif punctuation == ':' or punctuation == ';':
+            pause_duration = 0.4
         else:
             pause_duration = 0        
         return pause_duration
@@ -251,6 +239,21 @@ class AbstractSourceTextToSpeech():
         pass
 
 
+    def _repunctuate_src_stream_as_iterable_if_reqd(self, iter):
+        ret = iter
+        if (self._config.repunctuate_short_seg):
+            streamlined = ''
+            with iter as itr:
+                for i, text in enumerate(tqdm(itr)):
+                    text = text.strip()
+                    if (text == ''):
+                        continue
+                    punc = ", " if (text[-1] not in ',.;:!?') else ""
+                    streamlined += text + punc
+            ret = io.StringIO(streamlined)
+        return ret
+
+
 class TextFileToSpeech(AbstractSourceTextToSpeech):
     _src_file: str = None
 
@@ -260,7 +263,9 @@ class TextFileToSpeech(AbstractSourceTextToSpeech):
 
 
     def _open_src_stream_as_iterable(self): 
-        return open(self._src_file, 'r')
+        ret = open(self._src_file, 'r')
+        ret = self._repunctuate_src_stream_as_iterable_if_reqd(ret)
+        return ret
 
 
 class StandardInputToSpeech(AbstractSourceTextToSpeech):
@@ -271,6 +276,7 @@ class StandardInputToSpeech(AbstractSourceTextToSpeech):
     def _open_src_stream_as_iterable(self): 
         text = sys.stdin.read().strip()
         ret = io.StringIO(text)
+        ret = self._repunctuate_src_stream_as_iterable_if_reqd(ret)
         return ret
 
 
@@ -283,7 +289,7 @@ class TextDirectoryToSpeech():
         self.filter = filter
         self.recurse_dirs = recurse_dirs
         self.root_output_dir = root_output_dir
-
+        self.skip_existing = config.skip_existing
 
     def synthesize(self):
         last_ret_val = None
@@ -297,7 +303,12 @@ class TextDirectoryToSpeech():
                     if fnmatch.fnmatch(filename, self.filter):
                         src_file = os.path.join(dirpath, filename)
                         output_file = self._get_output_filename(src_file)
-                        last_ret_val = self._synthesize_file(src_file, output_file)
+                        synth_file = True
+                        if (os.path.exists(output_file) and self.skip_existing):
+                            synth_file = False
+                            logger.info(f"skipping existing: {output_file}")
+                        if (synth_file):
+                            last_ret_val = self._synthesize_file(src_file, output_file)
         else:
             files = glob.glob(os.path.join(self.root_src_dir, self.filter))
             for src_file in files:
@@ -374,11 +385,13 @@ if __name__ == "__main__":
     parser.add_argument('-pla', '--ph_lang', type=str, default="en-us", help="The phonemizer language to use.")
     parser.add_argument('--prepend_sid_in_filename', action="store_true")
     parser.add_argument('--test', action="store_true", help="Test everything except saving audio.")
+    parser.add_argument('--skip_existing', action="store_true", help="Skip if the audio file already exists.")
     parser.add_argument('--mp3', action="store_true", help="Save as mp3 rather than wav file.")
     parser.add_argument('--no_infer', action="store_true", help="Dont run the inference; used for phonemization only tasks.")
     parser.add_argument('--save_ipa_file', action="store_true", help="Save IPA text file to stage processing.")
     parser.add_argument('--read_as_ipa', action="store_true", help="Process the source as IPA and by-pass cleaning & phonemization.")
     parser.add_argument('--read_as_corpus', action="store_true", help="Process the source as extended LJSpeech format corpus with path|sid|text columns.")
+    parser.add_argument('--repunctuate_short_seg', action="store_true", help="Some models have note been trained with short words and need to be repunctuated.")
     parser.add_argument('--stdin', action="store_true", help="Use standard input instead of file source.")
     parser.add_argument('--verbose', action="store_true")
     args = parser.parse_args()

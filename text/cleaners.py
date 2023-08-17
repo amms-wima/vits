@@ -60,9 +60,9 @@ def replace_symbols(text, lang="en"):
         Output:
             text: "si lavi cau, diguemho"
     """
-    text = text.replace(";", ",")
-    text = text.replace("-", " ")
-    text = text.replace(":", ",")
+    # text = text.replace(";", ",")
+    # text = text.replace("-", " ")
+    # text = text.replace(":", ",")
     if lang == "en":
         text = text.replace("&", " and ")
     return text
@@ -105,7 +105,7 @@ def en_training_clean_and_phonemize(text, backend = None, lang = None):
     text = en_normalize_numbers(text)
     text = expand_abbreviations(text)
     text = replace_symbols(text)
-    text = remove_aux_symbols(text)
+    # text = remove_aux_symbols(text)
     text = collapse_whitespace(text)
     text = en_pi_si_phonemize(text, backend, lang)
     text = collapse_whitespace(text)
