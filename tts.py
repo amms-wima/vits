@@ -30,7 +30,7 @@ logger = logging.getLogger()
 class TextToSpeech():
     _DEFAULT_CLEANERS = ["en_training_clean_and_phonemize"]
     _DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
-    _REMAIN_PUNC_REGEX = r'(?<=[.:;?!])\s*'
+    _REMAIN_PUNC_REGEX = r'(?<=[.:;?!…—\[\]\(\)])\s*'
 
     _MODELS_CACHE = {}
 
@@ -61,12 +61,6 @@ class TextToSpeech():
             trimmed_seg = text_seg.strip()
             if (trimmed_seg == ''):
                 continue
-            # min_len = 21 if (self._config.repunctuate_short_seg) else 16
-            # pad_char = ',' if (self._config.repunctuate_short_seg) else ','
-            # trimmed_seg_len = len(trimmed_seg)
-            # if (trimmed_seg_len < min_len):
-            #     trimmed_seg = ',,' + trimmed_seg + ',,,'
-                # trimmed_seg += ',' + ((min_len - trimmed_seg_len) * pad_char) + ','
             seg_audio, ipa_seg = self._synthesize_segment(trimmed_seg)
             pause_dur = TextToSpeech._query_pause_duration(trimmed_seg[-1])
             if (self._config.verbose):
@@ -102,7 +96,7 @@ class TextToSpeech():
                         noise_scale=self._config.noise_scale, 
                         noise_scale_w=self._config.noise_scale_w,
                         length_scale=1.0 / self._config.length_scale
-                    )[0][0, 0].data.to(TextToSpeech._DEVICE).float().numpy()
+                    )[0][0, 0].data.to(TextToSpeech._DEVICE).cpu().numpy()
             del x_tst, x_tst_lengths
         del stn_tst
         return audio, ipa_seg
@@ -166,13 +160,19 @@ class TextToSpeech():
     @staticmethod
     def _query_pause_duration(punctuation):
         if punctuation == '.':
-            pause_duration = 0.7
+            pause_duration = 0.3
         elif punctuation == '?':
-            pause_duration = 0.35
+            pause_duration = 0.15
         elif punctuation == '!':
-            pause_duration = 0.8
+            pause_duration = 0.3
         elif punctuation == ':' or punctuation == ';':
-            pause_duration = 0.4
+            pause_duration = 0.1
+        elif punctuation == '…' or punctuation == '—':
+            pause_duration = 0.05
+        # elif punctuation == '-' :
+        #     pause_duration = 0.001
+        # elif punctuation == '[' or punctuation == ']' or punctuation == '(' or punctuation == ')':
+        #     pause_duration = 0.001
         else:
             pause_duration = 0        
         return pause_duration
