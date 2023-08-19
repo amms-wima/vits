@@ -263,7 +263,7 @@ class TextFileToSpeech(AbstractSourceTextToSpeech):
 
 
     def _open_src_stream_as_iterable(self): 
-        ret = open(self._src_file, 'r')
+        ret = open(self._src_file, 'r', encoding="utf-8")
         ret = self._repunctuate_src_stream_as_iterable_if_reqd(ret)
         return ret
 
@@ -329,7 +329,7 @@ class TextDirectoryToSpeech():
         return output_file
 
 def _read_cli_config_into_args(args):
-    with open(args.cli_config, "r") as f:
+    with open(args.cli_config, "r", encoding="utf-8") as f:
         data = f.read()
         config = json.loads(data)
     for key, value in config.items():
