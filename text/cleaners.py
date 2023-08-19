@@ -2,8 +2,11 @@
 
 """Set of default text cleaners"""
 import re
+import gc
 
 from unidecode import unidecode
+from phonemizer import phonemize
+
 
 from .pali.pa_si_phonemizer import pali_to_ipa
 
@@ -74,12 +77,7 @@ def _pad_subsection_if_previously(orig_subsection, ipa_ver):
     return ipa_ver
 
 
-#  NOTE, both espeak & phonemize have memory leaks. the following is an attempted work-around
-# from phonemizer import phonemize
-import gc
-
 def en_pi_si_phonemize(text, backend = "espeak", lang="en-us"):
-    from phonemizer import phonemize
     ret = ''
     sections = re.split(r'[@]', text)
     pali_subsections = re.findall(r'@([^@]+)@', text)
@@ -97,8 +95,6 @@ def en_pi_si_phonemize(text, backend = "espeak", lang="en-us"):
               en_phonemization = phonemize(trimmed_text, language=lang, backend=backend, strip=True, preserve_punctuation=True, with_stress=True)
               ipa += en_phonemization
         ret += _pad_subsection_if_previously(subsection, ipa)
-    del phonemize  # Explicitly delete the imported function
-    gc.collect()   # Trigger garbage collection
     return ret
     
 
@@ -114,4 +110,5 @@ def en_training_clean_and_phonemize(text, backend = None, lang = None):
     text = collapse_whitespace(text)
     text = en_pi_si_phonemize(text, backend, lang)
     text = collapse_whitespace(text)
+    gc.collect()  #  NOTE, both espeak & phonemize have memory leaks. the following is an attempted work-around
     return text
