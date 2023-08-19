@@ -298,7 +298,7 @@ class TextDirectoryToSpeech():
                 rel_dirpath = os.path.relpath(dirpath, self.root_src_dir)
                 output_dir = os.path.join(self.root_output_dir, rel_dirpath)
                 os.makedirs(output_dir, exist_ok=True)
-
+                filenames.sort()
                 for filename in filenames:
                     if fnmatch.fnmatch(filename, self.filter):
                         src_file = os.path.join(dirpath, filename)
