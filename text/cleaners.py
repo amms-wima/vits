@@ -1,12 +1,11 @@
 # THIS IS FROM COQUI
 
 """Set of default text cleaners"""
+
 import re
-import gc
 
 from unidecode import unidecode
 from phonemizer import phonemize
-
 
 from .pali.pa_si_phonemizer import pali_to_ipa
 
@@ -110,5 +109,4 @@ def en_training_clean_and_phonemize(text, backend = None, lang = None):
     text = collapse_whitespace(text)
     text = en_pi_si_phonemize(text, backend, lang)
     text = collapse_whitespace(text)
-    gc.collect()  #  NOTE, both espeak & phonemize have memory leaks. the following is an attempted work-around
     return text
