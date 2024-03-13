@@ -3,6 +3,8 @@
 # https://www.antvaset.com/c/21hf103jp3 > settings > Google cloud TTS > Eng India > Voice B male
 # https://readingfaithfully.org/pali-word-pronunciation-recordings
 
+import sys
+
 MAPPING = {
     # replacements
     "ṭh":    "ṭ",   # silence the 'h'
@@ -112,3 +114,6 @@ def _finalise_endings(ipa_text, debug):
     if debug:
         print(f"\n{ipa_text}")
     return ipa_text
+
+if __name__ == "__main__":
+    pali_to_ipa(sys.argv[1], True)
