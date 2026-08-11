@@ -183,11 +183,11 @@ class AbstractSourceTextToSpeech():
     _config = None
     _output_file: str = None
 
-    def __init__(self, config, output_file):
+    def __init__(self, config, output_file, skip_existing):
         self._config = config
         self._output_file = output_file
+        self._skip_existing = skip_existing
         self._tts_synthesizer = TextToSpeech(config)
-
 
     def synthesize(self):
         logger.info(f"Processing: {self._output_file if (not self._config.read_as_corpus) else 'corpus'}")
@@ -201,6 +201,9 @@ class AbstractSourceTextToSpeech():
                 if (self._config.read_as_corpus):
                     file_audio = None
                     text = self._parse_corpus_entry(text)
+                    if (os.path.exists(self._output_file) and self._skip_existing):
+                        logger.debug(f"Skipping:{self._output_file}")
+                        continue
                 file_audio, ipa_line = self._tts_synthesizer.synthesize(text, file_audio)
                 if (self._config.read_as_corpus):
                     self._write_output_files(file_audio, ipa_line)
@@ -257,10 +260,9 @@ class AbstractSourceTextToSpeech():
 class TextFileToSpeech(AbstractSourceTextToSpeech):
     _src_file: str = None
 
-    def __init__(self, config, src_file, output_file):
-        super().__init__(config, output_file)
+    def __init__(self, config, src_file, output_file, skip_existing):
+        super().__init__(config, output_file, skip_existing)
         self._src_file = src_file
-
 
     def _open_src_stream_as_iterable(self): 
         ret = open(self._src_file, 'r', encoding="utf-8")
@@ -269,9 +271,8 @@ class TextFileToSpeech(AbstractSourceTextToSpeech):
 
 
 class StandardInputToSpeech(AbstractSourceTextToSpeech):
-    def __init__(self, config, output_file):
-        super().__init__(config, output_file)
-
+    def __init__(self, config, output_file, skip_existing):
+        super().__init__(config, output_file, skip_existing)
 
     def _open_src_stream_as_iterable(self): 
         text = sys.stdin.read().strip()
@@ -318,7 +319,7 @@ class TextDirectoryToSpeech():
     
 
     def _synthesize_file(self, src_file, output_file):
-        tts_app = TextFileToSpeech(self._config, src_file, output_file)
+        tts_app = TextFileToSpeech(self._config, src_file, output_file, self.skip_existing)
         return tts_app.synthesize()
 
 
@@ -358,9 +359,9 @@ def tts_cli(args):
         logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
     if (args.stdin):
-        app = StandardInputToSpeech(args, output_name)    
+        app = StandardInputToSpeech(args, output_name, args.skip_existing)    
     elif (args.input_file):
-        app = TextFileToSpeech(args, args.input_file, output_name)
+        app = TextFileToSpeech(args, args.input_file, output_name, args.skip_existing)
     else:
         app = TextDirectoryToSpeech(args ,args.input_dir, args.filter, args.recurse_dirs, output_name)
     return app.synthesize()

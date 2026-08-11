@@ -10,11 +10,17 @@ MAPPING = {
     "ṭh":    "ṭ",   # silence the 'h'
     "ja":    "ʤɑː",   # retain 'ja' combo but all other a -> ʌ
     "ya":    "yɑː",   # retain 'ya' combo but all other a -> ʌ
+    "ll":    "lˌl", 
+    "ṭṭ":    "ʈˌʈ", 
 
     # vowels
     "a":    "ʌ",
+    "ʌi":    "aɪə",   # SI only
     "ā":    "ɑːɑː",
+    "æ":    "æ",    # SI only
+    "ǣ":    "ææ",   # SI only
     "e":    "ɛ",
+    "ē":    "ɛɛ",   # SI only
     "i":    "ɪ",
     "ī":    "ɪɪ",
     "o":    "oː",
@@ -22,45 +28,56 @@ MAPPING = {
     "ū":    "uːuː",
 
     # consonants
-    # "b":    "b",
+    "b":    "b",
     "c":    "ʧ",
     "d":    "ð",
-    "ḍ":    "dˌ",
-    # "f":    "f",
+    "ḍ":    "d",
+    "f":    "f",
     "g":    "ɡ",
     # "ɡh":   "gʰ",   # frequencies are too low for g & ʰ
-    # "h":    "h",
+    "h":    "h",
     "ḥ":    "h",
     "j":    "ʤ",
-    # "k":    "k",
-    # "l":    "l",
+    "k":    "k",
+    "l":    "l",
     "ḹ":    "lˈ",
     "ḷ":    "lˌ",
-    # "m":    "m",
-    # "ṁ":    "mgʰ",
-    # "ṃ":    "mɡ",
-    "ṁ":    "mˈ",
-    "ṃ":    "mˌ",
-    # "n":    "n",
+    "m":    "m",
+    "ṁ":    "ng",
+    "ṃ":    "ng",
+    "n":    "n",
     "ññ":    "nˈjj",
     "ñ":    "nˈ",
     "ṅ":    "ŋˈ",
     "ṇ":    "nˌ",
+    "ṉ":    "",     # SI only
     "o":    "ɒ",
-    # "p":    "p",
+    "ō":    "oʊ",   # SI only
+    "p":    "p",
     "q":    "k",
     "r":    "ɹ",
+    "ṛ":    "ɹuː",  # SI only
+    "ṝ":    "ɹɹuː", # SI only
     "ṣ":    "ʃ",
-    # "s":    "s",
+    "s":    "s",
+    "ś":    "ʃ",    # SI only
+    "ş":    "ʃ",    # SI only
     "t":    "θ",
     "ṭ":    "ʈˌ",
     "ʈ":    "t",
-    # "v":    "v",
+    "v":    "w",
     "w":    "v",
     "x":    "ɛk",
     "y":    "j",
-    # "z":    "z",
+    "z":    "z",
     "'s":   "z",
+    "-":   " ",
+    "(":   " ",
+    ")":   " ",
+    "[":   " ",
+    "]":   " ",
+    "<":   " ",
+    ">":   " ",
 }
 
 MODIFY_ENDINGS = {
@@ -69,33 +86,23 @@ MODIFY_ENDINGS = {
     "ɑː": "ˈʌ"
 }
 
-def pali_to_ipa(pali_text, debug=False):
-    pali_text = pali_text.lower()
+def si_to_ipa(si_rs_text, debug=False):
+    si_rs_text = si_rs_text.lower()
     if debug:
-        print(pali_text)
-    ipa_text = _apply_pali_mappings(pali_text, debug)
+        print(si_rs_text)
+    ipa_text = _apply_si_mappings(si_rs_text, debug)
     ipa_text = _finalise_endings(ipa_text, debug)
-    # ipa_text = _remove_tailing_stress(ipa_text, debug)
     return ipa_text
 
 
-def _apply_pali_mappings(pali_text, debug):
+def _apply_si_mappings(si_rs_text, debug):
     for k, v in MAPPING.items():    # Replace special characters first
-        pali_text = pali_text.replace(k, v)
+        si_rs_text = si_rs_text.replace(k, v)
         if debug:
-            print(f"[{k}->{v}] \t {pali_text}")
+            print(f"[{k}->{v}] \t {si_rs_text}")
     if debug:
-        print(f"\n{pali_text}")
-    return pali_text
-
-
-
-# def _remove_tailing_stress(ipa_text, debug):
-#     if (ipa_text.endswith('ˈ') or (ipa_text.endswith('ˌ'))):
-#         if debug:
-#             print(f"removed tailing: {ipa_text[-1:]}")
-#         ipa_text = ipa_text[:-1]
-#     return ipa_text
+        print(f"\n{si_rs_text}")
+    return si_rs_text
 
 
 def _finalise_endings(ipa_text, debug):
@@ -104,7 +111,6 @@ def _finalise_endings(ipa_text, debug):
     for split in splits:
         for k, v in MODIFY_ENDINGS.items():
             if (split.endswith(k)):
-                # split = split.replace(k, v)
                 split = split[:-len(k)] + v
                 if debug:
                     print(f"[{k}->{v}] \t {split}")
@@ -115,16 +121,5 @@ def _finalise_endings(ipa_text, debug):
         print(f"\n{ipa_text}")
     return ipa_text
 
-
 if __name__ == "__main__":
-    # Check if "--debug" is present anywhere in the command line arguments
-    debug = "--debug" in sys.argv
-    
-    # Process stdin line by line
-    for line in sys.stdin:
-        # strip() removes the trailing newline, which is usually desired for processing
-        result = pali_to_ipa(line.strip(), debug)
-        
-        # Print the result to stdout
-        # This satisfies "dump the returned value... for each line"
-        print(result)
+    si_to_ipa(sys.argv[1], True)

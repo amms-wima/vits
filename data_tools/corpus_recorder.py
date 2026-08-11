@@ -155,7 +155,7 @@ def main():
     while i < len(lines):
         line = lines[i]
         audio_file_path, speaker, transcript = line.strip().split("|")
-        pl_pause = False
+        pl_pause = True # False
 
         if (args.remove_missing):
             if (not is_missing(audio_file_path)):

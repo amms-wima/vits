@@ -7,7 +7,7 @@ import re
 from unidecode import unidecode
 from phonemizer import phonemize
 
-from .pali.pa_si_phonemizer import pali_to_ipa
+from .sinhala.si_to_ipa import si_to_ipa
 
 from .english.abbreviations import abbreviations_en
 from .english.number_norm import normalize_numbers as en_normalize_numbers
@@ -76,7 +76,7 @@ def _pad_subsection_if_previously(orig_subsection, ipa_ver):
     return ipa_ver
 
 
-def en_pi_si_phonemize(text, backend = "espeak", lang="en-us"):
+def en_si_phonemize(text, backend = "espeak", lang="en-us"):
     ret = ''
     sections = re.split(r'[@]', text)
     pali_subsections = re.findall(r'@([^@]+)@', text)
@@ -85,7 +85,7 @@ def en_pi_si_phonemize(text, backend = "espeak", lang="en-us"):
         if (subsection == ''):
             continue
         if (subsection in pali_subsections):
-            ipa += pali_to_ipa(subsection)
+            ipa += si_to_ipa(subsection)
         else:
             trimmed_text = subsection.strip()
             if (trimmed_text in [',', '.']):
@@ -107,6 +107,6 @@ def en_training_clean_and_phonemize(text, backend = None, lang = None):
     text = replace_symbols(text)
     # text = remove_aux_symbols(text)
     text = collapse_whitespace(text)
-    text = en_pi_si_phonemize(text, backend, lang)
+    text = en_si_phonemize(text, backend, lang)
     text = collapse_whitespace(text)
     return text

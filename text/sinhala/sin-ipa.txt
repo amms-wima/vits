@@ -1,0 +1,9 @@
+    "æ":    "æ",    # SI only
+    "ǣ":    "ææ",   # SI only
+    "ē":    "ɛɛ",   # SI only
+    "ṉ":    "",     # SI only
+    "ō":    "oʊ",   # SI only
+    "ṛ":    "ɹuː",  # SI only
+    "ṝ":    "ɹɹuː", # SI only
+    "ś":    "ʃ",    # SI only
+    "ş":    "ʃ",    # SI only

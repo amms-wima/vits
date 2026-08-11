@@ -3,16 +3,21 @@
 # https://www.antvaset.com/c/21hf103jp3 > settings > Google cloud TTS > Eng India > Voice B male
 # https://readingfaithfully.org/pali-word-pronunciation-recordings
 
+import sys
+
 MAPPING = {
     # replacements
     "ṭh":    "ṭ",   # silence the 'h'
-    "ja":    "ʤɑ",   # retain 'ja' combo but all other a -> ə
-    "ya":    "yɑ",   # retain 'ya' combo but all other a -> ə
+    "ja":    "ʤɑː",   # retain 'ja' combo but all other a -> ʌ
+    "ya":    "yɑː",   # retain 'ya' combo but all other a -> ʌ
 
     # vowels
-    "a":    "ə",
-    "ā":    "ɑɑ",
+    "a":    "ʌ",
+    "ā":    "ɑːɑː",
+    "æ":    "æ",    # SI only
+    "ǣ":    "ææ",   # SI only
     "e":    "ɛ",
+    "ē":    "ɛɛ",   # SI only
     "i":    "ɪ",
     "ī":    "ɪɪ",
     "o":    "oː",
@@ -20,78 +25,81 @@ MAPPING = {
     "ū":    "uːuː",
 
     # consonants
-    # "b":    "b",
+    "b":    "b",
     "c":    "ʧ",
     "d":    "ð",
-    "ḍ":    "ɖˌ",
-    # "f":    "f",
+    "ḍ":    "dˌ",
+    "f":    "f",
     "g":    "ɡ",
     # "ɡh":   "gʰ",   # frequencies are too low for g & ʰ
-    # "h":    "h",
+    "h":    "h",
     "ḥ":    "h",
     "j":    "ʤ",
-    # "k":    "k",
-    # "l":    "l",
+    "k":    "k",
+    "l":    "l",
     "ḹ":    "lˈ",
     "ḷ":    "lˌ",
-    # "m":    "m",
-    # "ṁ":    "mgʰ",
-    # "ṃ":    "mɡ",
+    "m":    "m",
     "ṁ":    "mˈ",
     "ṃ":    "mˌ",
-    # "n":    "n",
+    "n":    "n",
     "ññ":    "nˈjj",
     "ñ":    "nˈ",
     "ṅ":    "ŋˈ",
     "ṇ":    "nˌ",
+    "ṉ":    "",     # SI only
     "o":    "ɒ",
-    # "p":    "p",
+    "ō":    "oʊ",   # SI only
+    "p":    "p",
     "q":    "k",
     "r":    "ɹ",
-    # "s":    "s",
+    "ṛ":    "ɹuː",  # SI only
+    "ṝ":    "ɹɹuː", # SI only
+    "ṣ":    "ʃ",
+    "s":    "s",
+    "ś":    "ʃ",    # SI only
+    "ş":    "ʃ",    # SI only
     "t":    "θ",
     "ṭ":    "ʈˌ",
-    # "v":    "v",
+    "ʈ":    "t",
+    "v":    "v",
     "w":    "v",
     "x":    "ɛk",
     "y":    "j",
-    # "z":    "z",
+    "z":    "z",
     "'s":   "z",
+    "-":   " ",
+    "(":   " ",
+    ")":   " ",
+    "[":   " ",
+    "]":   " ",
+    "<":   " ",
+    ">":   " ",
 }
 
 MODIFY_ENDINGS = {
     "ˈ": "",
     "ˌ": "",
-    "ɑ": "ˈə"
+    "ɑː": "ˈʌ"
 }
 
-def pali_to_ipa(pali_text, debug=False):
-    pali_text = pali_text.lower()
+def si_to_ipa(si_rs_text, debug=False):
+    si_rs_text = si_rs_text.lower()
     if debug:
-        print(pali_text)
-    ipa_text = _apply_pali_mappings(pali_text, debug)
+        print(si_rs_text)
+    ipa_text = _apply_si_mappings(si_rs_text, debug)
     ipa_text = _finalise_endings(ipa_text, debug)
-    # ipa_text = _remove_tailing_stress(ipa_text, debug)
     return ipa_text
 
 
-def _apply_pali_mappings(pali_text, debug):
+def _apply_si_mappings(si_rs_text, debug):
     for k, v in MAPPING.items():    # Replace special characters first
-        pali_text = pali_text.replace(k, v)
+        si_rs_text = si_rs_text.replace(k, v)
         if debug:
-            print(f"[{k}->{v}] \t {pali_text}")
+            print(f"[{k}->{v}] \t {si_rs_text}")
     if debug:
-        print(f"\n{pali_text}")
-    return pali_text
-
-
-
-# def _remove_tailing_stress(ipa_text, debug):
-#     if (ipa_text.endswith('ˈ') or (ipa_text.endswith('ˌ'))):
-#         if debug:
-#             print(f"removed tailing: {ipa_text[-1:]}")
-#         ipa_text = ipa_text[:-1]
-#     return ipa_text
+        print(f"\n{si_rs_text}")
+    return si_rs_text
 
 
 def _finalise_endings(ipa_text, debug):
@@ -100,7 +108,6 @@ def _finalise_endings(ipa_text, debug):
     for split in splits:
         for k, v in MODIFY_ENDINGS.items():
             if (split.endswith(k)):
-                # split = split.replace(k, v)
                 split = split[:-len(k)] + v
                 if debug:
                     print(f"[{k}->{v}] \t {split}")
@@ -110,3 +117,6 @@ def _finalise_endings(ipa_text, debug):
     if debug:
         print(f"\n{ipa_text}")
     return ipa_text
+
+if __name__ == "__main__":
+    si_to_ipa(sys.argv[1], True)
