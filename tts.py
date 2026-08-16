@@ -121,6 +121,8 @@ class TextToSpeech():
 
 
     def _split_into_segments(self, text: str) -> list[str]:
+        if (self._config.read_as_corpus and self._config.read_as_ipa):
+            return [text]
         segments = re.split(TextToSpeech._REMAIN_PUNC_REGEX, text.strip())
         return segments
 
