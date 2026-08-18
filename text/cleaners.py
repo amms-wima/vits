@@ -13,6 +13,8 @@ from .english.abbreviations import abbreviations_en
 from .english.number_norm import normalize_numbers as en_normalize_numbers
 from .english.time_norm import expand_time_english
 
+import unicodedata
+
 # Regular expression matching whitespace:
 _whitespace_re = re.compile(r"\s+")
 
@@ -77,6 +79,7 @@ def _pad_subsection_if_previously(orig_subsection, ipa_ver):
 
 
 def en_pi_si_phonemize(text, backend = "espeak", lang="en-us"):
+    text = unicodedata.normalize('NFC', text)
     ret = ''
     sections = re.split(r'[@]', text)
     pali_subsections = re.findall(r'@([^@]+)@', text)

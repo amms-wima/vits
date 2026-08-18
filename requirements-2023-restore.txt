@@ -1,0 +1,18 @@
+# Core building blocks
+Cython==0.29.34
+numpy==1.23.5
+scipy==1.10.1
+matplotlib==3.7.1
+librosa==0.8.1
+Unidecode==1.3.6
+
+# Critical text-processing lock (fixes IPA stress & symbol mapping errors)
+phonemizer==2.2.1
+
+# PyTorch Framework
+torch==1.13.1
+torchvision==0.14.1
+
+# Logging & Utilities
+tensorboard==2.12.1
+pylatexenc==2.10

@@ -3,6 +3,7 @@ import logging
 
 from text import cleaners
 from text.symbols import symbols
+import unicodedata
 
 logger = logging
 
@@ -32,13 +33,19 @@ def cleaned_text_to_sequence(cleaned_text):
     Returns:
       List of integers corresponding to the symbols in the text
   '''
+  cleaned_text = unicodedata.normalize('NFC', cleaned_text)
   sequence = []
   for symbol in cleaned_text:
     try:
       symbol_id = _symbol_to_id[symbol]
       sequence += [symbol_id]
     except:
-      logger.warning(f"symbol[{symbol}] not found in symbol table; ignoring in order to continue...")
+      code_point = f"U+{ord(symbol):04X}"
+      unicode_name = unicodedata.name(symbol, "UNKNOWN NAME")
+      logger.warning(
+          f"symbol [{repr(symbol)}] ({code_point} - {unicode_name}) "
+          "not found in symbol table; ignoring in order to continue..."
+      )      
   return sequence
 
 
