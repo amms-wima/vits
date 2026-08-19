@@ -40,7 +40,8 @@ def convert_to_ascii(text):
 
 
 def remove_aux_symbols(text):
-    text = re.sub(r"[\<\>\(\)\[\]\"]+", "", text)
+    text = re.sub(r"[\<\>\(\)\[\]{}\"]+", "", text)
+    text = re.sub(r"[…—–•]+", " ", text)
     return text
 
 
@@ -108,7 +109,7 @@ def en_training_clean_and_phonemize(text, backend = None, lang = None):
     text = en_normalize_numbers(text)
     text = expand_abbreviations(text)
     text = replace_symbols(text)
-    # text = remove_aux_symbols(text)
+    text = remove_aux_symbols(text)
     text = collapse_whitespace(text)
     text = en_pi_si_phonemize(text, backend, lang)
     text = collapse_whitespace(text)
