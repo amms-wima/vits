@@ -41,7 +41,7 @@ def convert_to_ascii(text):
 
 def remove_aux_symbols(text):
     text = re.sub(r"[\<\>\(\)\[\]{}\"]+", "", text)
-    text = re.sub(r"[…—–•]+", " ", text)
+    text = re.sub(r"[…—–•]+", ", ", text)
     return text
 
 
@@ -88,7 +88,9 @@ def en_pi_si_phonemize(text, backend = "espeak", lang="en-us"):
         ipa = ''
         if (subsection == ''):
             continue
-        if (subsection in pali_subsections):
+        if (subsection.startswith('__') and subsection.endswith('__')):
+            ipa += subsection[2:-2]
+        elif (subsection in pali_subsections):
             ipa += pali_to_ipa(subsection)
         else:
             trimmed_text = subsection.strip()

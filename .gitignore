@@ -1,6 +1,7 @@
 .vscode
 .git
-.venv
+.venv*
+models
 /tmp
 test*.ipynb
 training_data

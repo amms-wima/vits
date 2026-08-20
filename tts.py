@@ -260,12 +260,13 @@ class AbstractSourceTextToSpeech():
                     continue
                 if (self._config.read_as_corpus):
                     file_audio = None
-                    text = self._parse_corpus_entry(text)
-                file_audio, ipa_line = self._tts_synthesizer.synthesize(text, file_audio)
-                if (self._config.read_as_corpus):
-                    self._write_output_files(file_audio, ipa_line)
-                else:
-                    ipa_text += ("" if i == 0 else "\n") + ipa_line
+                    text = self._parse_corpus_entry(i, text)
+                if (not (os.path.exists(self._output_file) and self._config .skip_existing)):
+                    file_audio, ipa_line = self._tts_synthesizer.synthesize(text, file_audio)
+                    if (self._config.read_as_corpus):
+                        self._write_output_files(file_audio, ipa_line)
+                    else:
+                        ipa_text += ("" if i == 0 else "\n") + ipa_line
         if (self._config.verbose and not self._config.read_as_ipa):
             logger.debug(f"Resultant IPA\n:[{ipa_text}]\n")
         if (not self._config.read_as_corpus):
@@ -285,16 +286,26 @@ class AbstractSourceTextToSpeech():
             TextToSpeech.save_audio_file(self._tts_synthesizer._hps.data.sampling_rate, file_audio, self._output_file, self._config.mp3)
 
 
-    def _parse_corpus_entry(self, line):
-        self._output_file, entry_sid, transcript = line.split("|")
-        entry_sid = int(entry_sid)
-        if (self._config.sid != entry_sid):
-            logger.info(f"Switching to SID: {entry_sid}")
-            self._config.sid = int(entry_sid)
-            self._sid = LongTensor([self._config.sid]).to(TextToSpeech._DEVICE)
-        return transcript
-    
+    def _parse_corpus_entry(self, lineNumber, line):
+        parts = line.split("|")
+        
+        if len(parts) == 3:
+            # Normal case: delimiter present
+            self._output_file, entry_sid_str, transcript = parts
+            entry_sid = int(entry_sid_str)
+        else:
+            # Fallback: no delimiter found
+            self._output_file = f"{lineNumber}.wav"
+            entry_sid = 129
+            transcript = line  # or handle differently if needed
 
+        if self._config.sid != entry_sid:
+            logger.info(f"Switching to SID: {entry_sid}")
+            self._config.sid = entry_sid
+            self._sid = LongTensor([self._config.sid]).to(TextToSpeech._DEVICE)
+
+        return transcript   
+    
     def _open_src_stream_as_iterable(self): 
         pass
 
