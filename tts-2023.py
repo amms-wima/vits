@@ -23,17 +23,15 @@ from tqdm import tqdm
 
 from text.symbols import symbols
 
-import random
-
 
 logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
 logger = logging.getLogger()
 
-class TextToSpeech:
+
+class TextToSpeech():
     _DEFAULT_CLEANERS = ["en_training_clean_and_phonemize"]
     _DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
-    # _REMAIN_PUNC_REGEX = r"(?<=[.:;?!…—\[\]\(\)])\s*"
-    _REMAIN_PUNC_REGEX = r"(?<=[.:;?!—\[\]\(\)])\s*"
+    _REMAIN_PUNC_REGEX = r'(?<=[.:;?!…—\[\]\(\)])\s*'
 
     _MODELS_CACHE = {}
 
@@ -43,73 +41,34 @@ class TextToSpeech:
 
     _sid: LongTensor = None
 
+
     def __init__(self, config: any):
         self._config = config
-
-        # Lock global PyTorch CUDA algorithms to deterministic mode
-        self._enable_deterministic_backend()
-
-        if self._config.config_path is None:
-            if self._config.verbose:
-                logger.debug(
-                    f"Using default cleaners: {TextToSpeech._DEFAULT_CLEANERS}"
-                )
+        if (self._config.config_path is None):
+            if (self._config.verbose):
+                logger.debug(f"Using default cleaners: {TextToSpeech._DEFAULT_CLEANERS}")
         else:
             self._hps = utils.get_hparams_from_file(self._config.config_path)
-
-        if not self._config.no_infer:
+        if (not self._config.no_infer):
             self._prepare_model()
-            if self._config.sid is not None:
-                self._sid = LongTensor([self._config.sid]).to(
-                    TextToSpeech._DEVICE
-                )
+            if (self._config.sid is not None):
+                self._sid = LongTensor([self._config.sid]).to(TextToSpeech._DEVICE)
 
-    def _enable_deterministic_backend(self):
-        """Forces CUDNN and PyTorch execution paths to be strictly deterministic."""
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-
-        # Enable deterministic algorithms where supported (warns instead of crashing if an op is non-deterministic)
-        try:
-            torch.use_deterministic_algorithms(True, warn_only=True)
-        except AttributeError:
-            pass
-
-    def _set_segment_seed(self, seed: int = 42):
-        """Resets Python, NumPy, CPU, and CUDA random number generators to guarantee identical latent noise sampling across runs."""
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
 
     def synthesize(self, text, concat_audio=None):
-        text_segments = self._split_into_segments(text)
+        text_segments = self._split_into_segments(text) 
         ipa_text = ""
-
-        # Default seed fallback if not provided in self._config
-        base_seed = getattr(self._config, "seed", 42)
-
         for i, text_seg in enumerate(text_segments):
             trimmed_seg = text_seg.strip()
-            if trimmed_seg == "":
+            if (trimmed_seg == ''):
                 continue
-
-            # Pass a segment-specific deterministic seed
-            segment_seed = base_seed + i
-            seg_audio, ipa_seg = self._synthesize_segment(
-                trimmed_seg, seed=segment_seed
-            )
-
+            seg_audio, ipa_seg = self._synthesize_segment(trimmed_seg)
             pause_dur = TextToSpeech._query_pause_duration(trimmed_seg[-1])
-            if self._config.verbose:
+            if (self._config.verbose):
                 logger.debug(f"\nsegment: {trimmed_seg}")
                 logger.debug(f"\tipa: {ipa_seg}")
                 logger.debug(f"\tpause: {pause_dur}")
-            concat_audio = self._concat_audio_segment(
-                concat_audio, seg_audio, pause_dur
-            )
+            concat_audio = self._concat_audio_segment(concat_audio, seg_audio, pause_dur)
             ipa_text += ("" if i == 0 else "\n") + ipa_seg
         return concat_audio, ipa_text
 
@@ -127,37 +86,22 @@ class TextToSpeech:
         return text_norm, ipa_seg
 
     
-    def _synthesize_segment(self, text, seed: int = 42):
+    def _synthesize_segment(self, text):
         audio = None
         stn_tst, ipa_seg = self._text_to_tensor(text)
-
-        if not self._config.no_infer:
-            # RESET RNG ENGINES IMMEDIATELY BEFORE INFERENCE
-            self._set_segment_seed(seed)
-
+        if (not self._config.no_infer):
             with no_grad():
                 x_tst = stn_tst.unsqueeze(0).to(TextToSpeech._DEVICE)
-                x_tst_lengths = LongTensor([stn_tst.size(0)]).to(
-                    TextToSpeech._DEVICE
-                )
-
-                audio = (
-                    self._net_g.infer(
-                        x_tst,
-                        x_tst_lengths,
-                        sid=self._sid,
-                        noise_scale=self._config.noise_scale,
+                x_tst_lengths = LongTensor([stn_tst.size(0)]).to(TextToSpeech._DEVICE)
+                audio = self._net_g.infer(x_tst, x_tst_lengths, sid=self._sid, 
+                        noise_scale=self._config.noise_scale, 
                         noise_scale_w=self._config.noise_scale_w,
-                        length_scale=1.0 / self._config.length_scale,
-                    )[0][0, 0]
-                    .data.to(TextToSpeech._DEVICE)
-                    .cpu()
-                    .numpy()
-                )
-
+                        length_scale=1.0 / self._config.length_scale
+                    )[0][0, 0].data.to(TextToSpeech._DEVICE).cpu().numpy()
             del x_tst, x_tst_lengths
         del stn_tst
         return audio, ipa_seg
+
 
     def _prepare_model(self):
         cache_key = (self._config.model_path, self._config.config_path)
@@ -179,7 +123,7 @@ class TextToSpeech:
 
     def _split_into_segments(self, text: str) -> list[str]:
         trimmedText = text.strip()
-        if (self._config.skip_punc):
+        if (self._config.no_segmentation):
             segments = [trimmedText]
         else:
             segments = re.split(TextToSpeech._REMAIN_PUNC_REGEX, trimmedText)
@@ -214,7 +158,7 @@ class TextToSpeech:
     @staticmethod
     def save_ipa_file(text: str, path: str):
         path = os.path.splitext(path)[0] + ".ipa"
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(text)
 
 
@@ -458,7 +402,7 @@ if __name__ == "__main__":
     parser.add_argument('--prepend_sid_in_filename', action="store_true")
     parser.add_argument('--test', action="store_true", help="Test everything except saving audio.")
     parser.add_argument('--skip_existing', action="store_true", help="Skip if the audio file already exists.")
-    parser.add_argument('--skip_punc', action="store_true", help="Skip tts splits on punctuation markers")
+    parser.add_argument('--no_segmentation', action="store_true", help="Skip tts apply segmentation to input text")
     parser.add_argument('--mp3', action="store_true", help="Save as mp3 rather than wav file.")
     parser.add_argument('--no_infer', action="store_true", help="Dont run the inference; used for phonemization only tasks.")
     parser.add_argument('--save_ipa_file', action="store_true", help="Save IPA text file to stage processing.")

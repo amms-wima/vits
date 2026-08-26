@@ -94,8 +94,11 @@ def en_pi_si_phonemize(text, backend = "espeak", lang="en-us"):
             ipa += pali_to_ipa(subsection)
         else:
             trimmed_text = subsection.strip()
-            if (trimmed_text in [',', '.']):
-              ipa += subsection
+            # Guard: If segment has no letters or digits (e.g. "… '", "...", "—"), skip phonemize
+            if not re.search(r'[a-zA-Z0-9]', trimmed_text):
+                ipa += subsection
+            elif trimmed_text in [',', '.']:
+                ipa += subsection
             else:
               en_phonemization = phonemize(trimmed_text, language=lang, backend=backend, strip=True, preserve_punctuation=True, with_stress=True)
               ipa += en_phonemization
@@ -111,7 +114,7 @@ def en_training_clean_and_phonemize(text, backend = None, lang = None):
     text = en_normalize_numbers(text)
     text = expand_abbreviations(text)
     text = replace_symbols(text)
-    text = remove_aux_symbols(text)
+    # text = remove_aux_symbols(text)
     text = collapse_whitespace(text)
     text = en_pi_si_phonemize(text, backend, lang)
     text = collapse_whitespace(text)
